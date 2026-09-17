@@ -568,6 +568,20 @@ async function safeWriteJsonFile(filePath: string, data: any): Promise<void> {
 let memoryInstansiCache: InstansiItem[] = [];
 let lastCloudSyncTime = new Date().toISOString();
 
+// Synchronous bootstrap from local disk backup so data is immediately available on boot
+try {
+  if (fs.existsSync(CLOUD_DB_FILE)) {
+    const fileData = fs.readFileSync(CLOUD_DB_FILE, 'utf-8');
+    const parsed = JSON.parse(fileData);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      memoryInstansiCache = parsed;
+      console.log(`[Cloud File DB] Instant bootstrap memory cache loaded with ${memoryInstansiCache.length} records.`);
+    }
+  }
+} catch (e) {
+  console.warn('[Cloud File DB] Notice loading bootstrap cache:', e);
+}
+
 async function initCloudStorage() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
@@ -597,8 +611,14 @@ async function initCloudStorage() {
 
       if (!error && Array.isArray(data) && data.length > 0) {
         const sbList = data.map(dbRowToInstansi);
+        // Instantly populate in-memory cache so all endpoints can serve fresh data immediately
+        memoryInstansiCache = sbList.map(prepareForMemoryCache);
+        isSupabaseConnected = true;
+        supabaseErrorMessage = null;
+        lastCloudSyncTime = new Date().toISOString();
+        console.log(`[Supabase Cloud] Initialized ${memoryInstansiCache.length} records in memory cache.`);
 
-        // Hydrate full formations for any instansi with truncated, missing formasiList, or missing analytics
+        // Hydrate full formations in background for any instansi with truncated or missing formasiList
         for (let i = 0; i < sbList.length; i++) {
           const inst = sbList[i];
           const expCount = inst.totalFormasiDB || 0;
@@ -921,8 +941,6 @@ async function persistSingleInstansiToCloud(item: InstansiItem): Promise<Instans
 }
 
 async function startServer() {
-  await initCloudStorage();
-
   const app = express();
   const PORT = 3000;
 
@@ -1818,6 +1836,10 @@ ${pdfTextContent ? `\n\n[Teks Hasil Ekstraksi PDF Direct]:\n${pdfTextContent.sli
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server SSCASN Parser running on http://localhost:${PORT}`);
+    // Non-blocking background cloud database sync so Cloud Run startup probe passes instantly
+    initCloudStorage().catch((err) => {
+      console.error('[Cloud DB] Background initial sync error:', err);
+    });
   });
 }
 

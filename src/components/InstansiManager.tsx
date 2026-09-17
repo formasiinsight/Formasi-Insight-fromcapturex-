@@ -760,11 +760,11 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
             </button>
           </div>
         ) : (
-          <div className="table-scroll-container overflow-x-auto overscroll-contain" data-table-scroll="true">
+          <div className="table-scroll-container overflow-x-auto overscroll-x-contain overscroll-y-auto" data-table-scroll="true">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-900 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
-                  <th className="p-2.5 text-center sticky top-0 left-0 z-30 bg-slate-900 border-b border-slate-800 w-12 shadow-[2px_0_5px_rgba(0,0,0,0.3)] select-none">
+                  <th className="p-2.5 text-center static md:sticky md:top-0 md:left-0 md:z-30 bg-slate-900 border-b border-slate-800 w-12 md:shadow-[2px_0_5px_rgba(0,0,0,0.3)] select-none">
                     No
                   </th>
 
@@ -923,7 +923,7 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
                   </th>
 
                   {/* AKSI */}
-                  <th className="p-2.5 text-right sticky top-0 right-0 z-30 bg-slate-900 border-b border-slate-800 border-l border-slate-800/80 shadow-[-4px_0_10px_rgba(0,0,0,0.4)] whitespace-nowrap min-w-[110px]">
+                  <th className="p-2.5 text-right static md:sticky md:top-0 md:right-0 md:z-30 bg-slate-900 border-b border-slate-800 md:border-l border-slate-800/80 md:shadow-[-4px_0_10px_rgba(0,0,0,0.4)] whitespace-nowrap min-w-[110px]">
                     Aksi
                   </th>
                 </tr>
@@ -940,8 +940,8 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
                       key={inst.id}
                       className="hover:bg-slate-800/50 transition-colors group"
                     >
-                      {/* NO (Sticky Left) */}
-                      <td className="p-2.5 text-center text-slate-500 font-mono text-[11px] sticky left-0 z-20 bg-slate-900 group-hover:bg-slate-800/90 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
+                      {/* NO (Sticky Left on Desktop, Static on Mobile) */}
+                      <td className="p-2.5 text-center text-slate-500 font-mono text-[11px] static md:sticky md:left-0 md:z-20 bg-slate-900 group-hover:bg-slate-800/90 md:shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
                         {index + 1}
                       </td>
 
@@ -1047,8 +1047,8 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
                         </div>
                       </td>
 
-                      {/* AKSI KELOLA (Sticky Right) */}
-                      <td className="p-2.5 text-right sticky right-0 z-20 bg-slate-900 group-hover:bg-slate-800/90 border-l border-slate-800/80 shadow-[-4px_0_10px_rgba(0,0,0,0.4)]">
+                      {/* AKSI KELOLA (Sticky Right on Desktop, Static on Mobile) */}
+                      <td className="p-2.5 text-right static md:sticky md:right-0 md:z-20 bg-slate-900 group-hover:bg-slate-800/90 md:border-l border-slate-800/80 md:shadow-[-4px_0_10px_rgba(0,0,0,0.4)]">
                         <div className="flex items-center justify-end gap-1">
                           {inst.parsedData && (
                             <button

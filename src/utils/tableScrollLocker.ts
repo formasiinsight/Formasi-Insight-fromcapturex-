@@ -1,17 +1,14 @@
 /**
- * Utility to enforce strict 1-Dimensional (1D) axis scrolling on all table components.
- * - Prevents diagonal scrolling (trackpad/touch simultaneously scrolling both X and Y).
- * - Prevents scroll chaining / leaking to outer parent modals or the entire page ("scroll ke semuanya").
- * - Locks each gesture to strictly Horizontal OR strictly Vertical.
+ * Utility to enforce strict 1-Dimensional (1D) axis scrolling on table components.
+ * - Prevents diagonal scrolling for desktop trackpads & mouse wheels.
+ * - Prevents scroll chaining / leaking to outer parent modals or page.
+ * - Mobile / Touch devices are kept on 100% native hardware compositor scrolling
+ *   (smooth inertial momentum at full 60-120 FPS).
  */
 
 interface ScrollLockSession {
   axis: 'x' | 'y' | null;
   timer: any;
-  touchStartX: number;
-  touchStartY: number;
-  initialScrollLeft: number;
-  initialScrollTop: number;
 }
 
 const activeSessions = new WeakMap<HTMLElement, ScrollLockSession>();
@@ -22,10 +19,6 @@ function getSession(el: HTMLElement): ScrollLockSession {
     session = {
       axis: null,
       timer: null,
-      touchStartX: 0,
-      touchStartY: 0,
-      initialScrollLeft: 0,
-      initialScrollTop: 0,
     };
     activeSessions.set(el, session);
   }
@@ -71,20 +64,46 @@ function isScrollable(el: HTMLElement): boolean {
   if (el.classList.contains('table-scroll-container') || el.hasAttribute('data-table-scroll')) {
     return true;
   }
-  const style = window.getComputedStyle(el);
-  const ox = style.overflowX;
-  const oy = style.overflowY;
-  const isScroll = ['auto', 'scroll'].includes(ox) || ['auto', 'scroll'].includes(oy);
+  const ox = el.style.overflowX;
+  const oy = el.style.overflowY;
+  if (['auto', 'scroll'].includes(ox) || ['auto', 'scroll'].includes(oy)) return true;
+
   const hasClass =
     el.classList.contains('overflow-auto') ||
     el.classList.contains('overflow-x-auto') ||
     el.classList.contains('overflow-y-auto');
+  if (hasClass) return true;
 
-  return isScroll || hasClass;
+  if (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
- * Global wheel handler for single-axis table scroll locking
+ * Cascades unconsumed vertical scroll delta to the nearest scrollable ancestor (or window)
+ */
+function cascadeScrollToParent(el: HTMLElement, deltaY: number) {
+  let parent = el.parentElement;
+  while (parent && parent !== document.body && parent !== document.documentElement) {
+    const style = window.getComputedStyle(parent);
+    const overflowY = style.overflowY;
+    if ((overflowY === 'auto' || overflowY === 'scroll') && parent.scrollHeight > parent.clientHeight) {
+      const prev = parent.scrollTop;
+      parent.scrollTop += deltaY;
+      if (parent.scrollTop !== prev) {
+        return;
+      }
+    }
+    parent = parent.parentElement;
+  }
+  // Default to global window scroll if no scrollable parent absorbed it
+  window.scrollBy({ top: deltaY, behavior: 'instant' as ScrollBehavior });
+}
+
+/**
+ * Global wheel handler for single-axis table scroll locking on desktop / trackpad
  */
 function handleTableWheel(e: WheelEvent) {
   const container = findTableScrollContainer(e.target);
@@ -142,94 +161,48 @@ function handleTableWheel(e: WheelEvent) {
     e.stopPropagation();
     container.scrollLeft += deltaX;
   } else if (session.axis === 'y') {
-    if (!canScrollY) return;
-    // Strictly vertical scrolling: eliminate horizontal drift & contain scroll
-    e.preventDefault();
-    e.stopPropagation();
+    if (!canScrollY) {
+      // Container has no vertical overflow room; allow outer page/modal to scroll seamlessly
+      return;
+    }
+
+    const isAtTop = container.scrollTop <= 0;
+    const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+
+    // If scrolling up while already at top, or scrolling down while already at bottom:
+    // Seamlessly hand off to outer page without requiring the user to move cursor outside table!
+    if ((deltaY < 0 && isAtTop) || (deltaY > 0 && isAtBottom)) {
+      session.axis = null;
+      return;
+    }
+
+    // Container can absorb scroll: eliminate horizontal drift and scroll table
+    const prevScrollTop = container.scrollTop;
     container.scrollTop += deltaY;
-  }
-}
+    const scrollConsumed = container.scrollTop - prevScrollTop;
+    const unconsumedDeltaY = deltaY - scrollConsumed;
 
-/**
- * Touch start handler to prepare 1D gesture tracking on mobile/touch screens
- */
-function handleTableTouchStart(e: TouchEvent) {
-  if (e.touches.length !== 1) return;
-  const container = findTableScrollContainer(e.target);
-  if (!container) return;
-
-  const session = getSession(container);
-  session.axis = null;
-  session.touchStartX = e.touches[0].clientX;
-  session.touchStartY = e.touches[0].clientY;
-  session.initialScrollLeft = container.scrollLeft;
-  session.initialScrollTop = container.scrollTop;
-}
-
-/**
- * Touch move handler to lock touch pan to strictly 1 axis (X or Y, never diagonal)
- */
-function handleTableTouchMove(e: TouchEvent) {
-  if (e.touches.length !== 1) return;
-  const container = findTableScrollContainer(e.target);
-  if (!container) return;
-
-  const canScrollX = container.scrollWidth > container.clientWidth;
-  const canScrollY = container.scrollHeight > container.clientHeight;
-  if (!canScrollX && !canScrollY) return;
-
-  const session = getSession(container);
-  const touch = e.touches[0];
-  const diffX = touch.clientX - session.touchStartX;
-  const diffY = touch.clientY - session.touchStartY;
-  const absX = Math.abs(diffX);
-  const absY = Math.abs(diffY);
-
-  // Establish lock once small gesture threshold is passed (5px)
-  if (!session.axis) {
-    if (absX < 5 && absY < 5) return;
-    session.axis = absX >= absY ? 'x' : 'y';
-  }
-
-  if (session.axis === 'x') {
-    if (!canScrollX) return;
-    // Prevent diagonal motion & stop scroll propagation to modal/body
     e.preventDefault();
-    e.stopPropagation();
-    container.scrollLeft = session.initialScrollLeft - diffX;
-  } else if (session.axis === 'y') {
-    if (!canScrollY) return;
-    // Prevent diagonal motion & stop scroll propagation to modal/body
-    e.preventDefault();
-    e.stopPropagation();
-    container.scrollTop = session.initialScrollTop - diffY;
-  }
-}
 
-/**
- * Touch end/cancel handler to reset touch lock
- */
-function handleTableTouchEnd(e: TouchEvent) {
-  const container = findTableScrollContainer(e.target);
-  if (!container) return;
-  const session = getSession(container);
-  session.axis = null;
+    // If gesture hit the boundary on this tick with leftover momentum, cascade remainder to parent/window
+    if (Math.abs(unconsumedDeltaY) > 0.5) {
+      if ((unconsumedDeltaY < 0 && container.scrollTop <= 0) || (unconsumedDeltaY > 0 && container.scrollTop + container.clientHeight >= container.scrollHeight - 1)) {
+        cascadeScrollToParent(container, unconsumedDeltaY);
+      }
+    }
+  }
 }
 
 let isInitialized = false;
 
 /**
- * Initializes global event listeners to lock all table components to 1D scroll axis.
- * Can be called once at application startup.
+ * Initializes global event listeners to lock table components to 1D scroll axis on desktop trackpad.
+ * On mobile touch screens, native hardware momentum scrolling is preserved.
  */
 export function initTableScrollLocker() {
   if (isInitialized || typeof window === 'undefined') return;
   isInitialized = true;
 
-  // Use capture phase and non-passive listener to intercept before browser native 2D scroll
+  // Trackpad / Wheel listener (Desktop)
   window.addEventListener('wheel', handleTableWheel, { passive: false, capture: true });
-  window.addEventListener('touchstart', handleTableTouchStart, { passive: true, capture: true });
-  window.addEventListener('touchmove', handleTableTouchMove, { passive: false, capture: true });
-  window.addEventListener('touchend', handleTableTouchEnd, { passive: true, capture: true });
-  window.addEventListener('touchcancel', handleTableTouchEnd, { passive: true, capture: true });
 }

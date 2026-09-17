@@ -3,15 +3,36 @@
 /* 
  * Strict 1-Dimensional (1D) Scroll Lock & Containment for All Table Components 
  * - Disallows diagonal scrolling and 2D free panning
- * - Prevents overscroll chaining to outer modal or whole page
+ * - Horizontal (X): Contained to prevent accidental browser swipe navigation
+ * - Vertical (Y): Seamless handoff & chaining to parent/page scroll when boundaries are reached
+ * - Native hardware momentum scrolling for touch screens
  */
 .table-scroll-container,
 [data-table-scroll="true"],
-div:has(> table) {
-  overscroll-behavior: contain !important;
+div:has(> table),
+table {
   overscroll-behavior-x: contain !important;
-  overscroll-behavior-y: contain !important;
-  touch-action: pan-x pan-y;
+  overscroll-behavior-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Khusus Mobile (layar <= 768px):
+ * Matikan seluruh column sticky / fixed di semua tabel agar scrolling 100% natural,
+ * bebas overlap/glitch, dan tidak memakan ruang pandang layar smartphone.
+ */
+@media screen and (max-width: 768px) {
+  .table-scroll-container th,
+  .table-scroll-container td,
+  [data-table-scroll="true"] th,
+  [data-table-scroll="true"] td,
+  table th,
+  table td {
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    box-shadow: none !important;
+  }
 }
 
 /* 

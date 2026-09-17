@@ -3,6 +3,8 @@ import {
   ArrowLeft,
   ChevronRight,
   Home,
+  LayoutDashboard,
+  TableProperties,
   Building2,
   Briefcase,
   GraduationCap,
@@ -222,19 +224,19 @@ export const FormasiDetailPage: React.FC<FormasiDetailPageProps> = ({
             label: 'Portal SSCASN',
             icon: Home,
             onClick: handleBreadcrumbDashboard,
-            title: 'Kembali ke Dashboard Utama',
+            title: 'Kembali ke Beranda Utama',
           },
           {
-            label: fromTab === 'dashboard' ? 'Dashboard Analytics' : 'Daftar Formasi CPNS',
-            icon: fromTab === 'dashboard' ? Home : Briefcase,
+            label: fromTab === 'dashboard' ? 'Analisis Instansi' : 'Katalog Formasi',
+            icon: fromTab === 'dashboard' ? LayoutDashboard : TableProperties,
             onClick: fromTab === 'dashboard' ? handleBreadcrumbDashboard : handleBreadcrumbFormasi,
-            title: fromTab === 'dashboard' ? 'Kembali ke Dashboard' : 'Kembali ke Daftar Formasi',
+            title: fromTab === 'dashboard' ? 'Kembali ke Analisis Instansi' : 'Kembali ke Katalog Formasi',
           },
           {
             label: instansiNama || 'Instansi',
             icon: Building2,
             onClick: handleBreadcrumbInstansi,
-            title: `Filter berdasarkan ${instansiNama}`,
+            title: `Kembali ke Formasi ${instansiNama || 'Instansi'}`,
           },
           {
             label: header.jabatanFormasi || 'Detail Formasi',
@@ -243,38 +245,6 @@ export const FormasiDetailPage: React.FC<FormasiDetailPageProps> = ({
             title: header.jabatanFormasi,
           },
         ]}
-        rightContent={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopySummary}
-              type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
-              title="Salin ringkasan data formasi"
-            >
-              {hasCopied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-400">Tersalin</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Salin Info</span>
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={onBack}
-              type="button"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
-              title="Kembali ke halaman sebelumnya"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Kembali</span>
-            </button>
-          </div>
-        }
       />
 
       {/* 2. FORMASI HERO HEADER CARD */}

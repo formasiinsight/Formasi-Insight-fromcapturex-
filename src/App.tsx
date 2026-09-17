@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   Home,
   LayoutDashboard,
+  TableProperties,
   Briefcase,
   Building2,
   Database,
@@ -49,6 +50,7 @@ export default function App() {
 
   const [instansiList, setInstansiList] = useState<InstansiItem[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'formasi' | 'instansi' | 'users'>('dashboard');
+  const [navSourceTab, setNavSourceTab] = useState<'dashboard' | null>(null);
   const [selectedInstansiId, setSelectedInstansiId] = useState<string>('ALL');
   const [selectedJenjang, setSelectedJenjang] = useState<string>('ALL');
   const [selectedJurusan, setSelectedJurusan] = useState<string>('');
@@ -79,6 +81,7 @@ export default function App() {
 
   const handleTabChange = (newTab: 'dashboard' | 'formasi' | 'instansi' | 'users') => {
     setPesertaModalFormasi(null);
+    setNavSourceTab(null);
     if (currentUser?.role !== 'admin' && (newTab === 'instansi' || newTab === 'users')) {
       setActiveTab('dashboard');
       return;
@@ -319,7 +322,7 @@ export default function App() {
 
     if (activeTab === 'dashboard') {
       items.push({
-        label: 'Dashboard Analytics',
+        label: 'Analisis Instansi',
         icon: LayoutDashboard,
         active: selectedInstansiId === 'ALL' && !selectedJurusan && selectedJenjang === 'ALL',
         onClick:
@@ -329,7 +332,7 @@ export default function App() {
                 setSelectedJurusan('');
               }
             : undefined,
-        title: 'Ringkasan & Analisis Data Formasi',
+        title: 'Peluang & Analisis Formasi Instansi',
       });
 
       if (selectedInstansi && selectedInstansiId !== 'ALL') {
@@ -362,26 +365,54 @@ export default function App() {
         });
       }
     } else if (activeTab === 'formasi') {
-      items.push({
-        label: 'Daftar Formasi CPNS',
-        icon: Briefcase,
-        active: selectedInstansiId === 'ALL' && !selectedJurusan && selectedJenjang === 'ALL',
-        onClick: () => {
-          setSelectedInstansiId('ALL');
-          setSelectedJenjang('ALL');
-          setSelectedJurusan('');
-        },
-        title: 'Lihat Semua Formasi SSCASN',
-      });
-
-      if (selectedInstansiId !== 'ALL') {
+      if (navSourceTab === 'dashboard') {
+        // Navigated from "Analisis Instansi" menu to view detail of an instansi
         items.push({
-          label: selectedInstansi?.nama || selectedInstansiId,
-          icon: Building2,
-          active: !selectedJurusan && selectedJenjang === 'ALL',
-          onClick: () => setSelectedInstansiId('ALL'),
-          title: 'Klik untuk reset ke semua instansi',
+          label: 'Analisis Instansi',
+          icon: LayoutDashboard,
+          onClick: () => {
+            setNavSourceTab(null);
+            handleTabChange('dashboard');
+          },
+          title: 'Kembali ke Analisis Instansi',
         });
+
+        if (selectedInstansiId !== 'ALL') {
+          items.push({
+            label: selectedInstansi?.nama || selectedInstansiId,
+            icon: Building2,
+            active: !selectedJurusan && selectedJenjang === 'ALL',
+            title: `Detail Formasi ${selectedInstansi?.nama || selectedInstansiId}`,
+          });
+        } else {
+          items.push({
+            label: 'Detail Formasi Instansi',
+            icon: TableProperties,
+            active: true,
+          });
+        }
+      } else {
+        items.push({
+          label: 'Katalog Formasi',
+          icon: TableProperties,
+          active: selectedInstansiId === 'ALL' && !selectedJurusan && selectedJenjang === 'ALL',
+          onClick: () => {
+            setSelectedInstansiId('ALL');
+            setSelectedJenjang('ALL');
+            setSelectedJurusan('');
+          },
+          title: 'Lihat Semua Formasi SSCASN',
+        });
+
+        if (selectedInstansiId !== 'ALL') {
+          items.push({
+            label: selectedInstansi?.nama || selectedInstansiId,
+            icon: Building2,
+            active: !selectedJurusan && selectedJenjang === 'ALL',
+            onClick: () => setSelectedInstansiId('ALL'),
+            title: 'Klik untuk reset ke semua instansi',
+          });
+        }
       }
 
       if (selectedJenjang && selectedJenjang !== 'ALL') {
@@ -405,12 +436,7 @@ export default function App() {
       }
     } else if (activeTab === 'instansi') {
       items.push({
-        label: 'Master Data',
-        icon: Database,
-        onClick: () => handleTabChange('instansi'),
-      });
-      items.push({
-        label: 'Database Instansi & Parsing PDF',
+        label: 'Database Instansi',
         icon: Building2,
         active: true,
         badge: `${instansiList.length} Instansi`,
@@ -418,11 +444,7 @@ export default function App() {
       });
     } else if (activeTab === 'users') {
       items.push({
-        label: 'Pengaturan Sistem',
-        icon: ShieldCheck,
-      });
-      items.push({
-        label: 'User Management & Hak Akses',
+        label: 'User Management',
         icon: Users,
         active: true,
         badge: currentUser?.role === 'admin' ? 'Administrator' : 'Pengguna',
@@ -487,15 +509,17 @@ export default function App() {
               formasi={pesertaModalFormasi?.block || null}
               instansiNama={pesertaModalFormasi?.instansiNama || ''}
               instansiId={pesertaModalFormasi?.instansiId}
-              fromTab={pesertaModalFormasi?.fromTab || activeTab}
+              fromTab={pesertaModalFormasi?.fromTab || (navSourceTab === 'dashboard' ? 'dashboard' : activeTab)}
               onBack={() => setPesertaModalFormasi(null)}
               onNavigate={(tab) => {
                 setPesertaModalFormasi(null);
+                setNavSourceTab(null);
                 setActiveTab(tab);
               }}
               onSelectInstansi={(instId) => {
                 setSelectedInstansiId(instId);
                 setPesertaModalFormasi(null);
+                setNavSourceTab(pesertaModalFormasi?.fromTab === 'dashboard' ? 'dashboard' : null);
                 setActiveTab('formasi');
               }}
               onUpdatePesertaList={handleUpdatePesertaFromModal}
@@ -525,7 +549,10 @@ export default function App() {
                       alert('Akses Dibatasi: Upload PDF & Kelola Formasi hanya dapat dilakukan oleh Administrator.');
                     }
                   }}
-                  onGoToFormasiTab={() => setActiveTab('formasi')}
+                  onGoToFormasiTab={() => {
+                    setNavSourceTab('dashboard');
+                    setActiveTab('formasi');
+                  }}
                   onViewPeserta={(block, instansiNama) => {
                     setPesertaModalFormasi({
                       block,
@@ -553,7 +580,7 @@ export default function App() {
                       block,
                       instansiNama,
                       instansiId: instansiId || (selectedInstansiId !== 'ALL' ? selectedInstansiId : undefined),
-                      fromTab: 'formasi',
+                      fromTab: navSourceTab === 'dashboard' ? 'dashboard' : 'formasi',
                     });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}

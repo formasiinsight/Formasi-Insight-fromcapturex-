@@ -798,7 +798,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onParsed, onLoadSample }
             </div>
 
             <div
-              className="table-scroll-container border border-slate-800 rounded-2xl overflow-hidden max-h-80 overflow-y-auto bg-slate-950/40 overscroll-contain"
+              className="table-scroll-container border border-slate-800 rounded-2xl overflow-hidden max-h-80 overflow-y-auto bg-slate-950/40 overscroll-x-contain overscroll-y-auto"
               data-table-scroll="true"
             >
               <table className="w-full text-left border-collapse text-xs">
@@ -1015,7 +1015,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onParsed, onLoadSample }
             </div>
 
             <div
-              className="table-scroll-container border border-slate-800 rounded-2xl overflow-hidden max-h-96 overflow-y-auto bg-slate-950/40 overscroll-contain"
+              className="table-scroll-container border border-slate-800 rounded-2xl overflow-hidden max-h-96 overflow-y-auto bg-slate-950/40 overscroll-x-contain overscroll-y-auto"
               data-table-scroll="true"
             >
               <table className="w-full text-left border-collapse text-xs">

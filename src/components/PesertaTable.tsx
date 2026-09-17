@@ -138,7 +138,7 @@ export const PesertaTable: React.FC<PesertaTableProps> = ({ pesertaList: rawPese
 
       {/* Responsive Data Table */}
       <div
-        className="table-scroll-container overflow-auto max-h-[calc(80vh-180px)] min-h-[350px] rounded-xl border border-slate-200 dark:border-slate-800 relative overscroll-contain"
+        className="table-scroll-container overflow-auto max-h-[calc(80vh-180px)] min-h-[350px] rounded-xl border border-slate-200 dark:border-slate-800 relative overscroll-x-contain overscroll-y-auto"
         data-table-scroll="true"
       >
         <table className="w-full text-xs text-left">

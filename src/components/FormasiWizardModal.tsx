@@ -583,6 +583,13 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
       return;
     }
 
+    if (chunks.length > 0 && completedChunksCount < chunks.length) {
+      setStep2Error(
+        `Proses parsing batch PDF belum selesai (${completedChunksCount}/${chunks.length} batch selesai — ${chunkProgressPercent}%). Harap tunggu hingga seluruh chunk selesai 100% sebelum melanjutkan ke pratinjau data.`
+      );
+      return;
+    }
+
     const allPeserta = detectedFormasis.flatMap((f) => f.pesertaList || []);
     const aggregatedResult: SSCASNParsedResult = {
       meta: {
@@ -648,6 +655,15 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
     0
   );
   const completedChunksCount = chunks.filter((c) => c.status === 'completed').length;
+  const isChunksActive = chunks.length > 0;
+  const isChunks100Percent = isChunksActive && completedChunksCount === chunks.length;
+  const isChunksIncomplete = isChunksActive && completedChunksCount < chunks.length;
+  const chunkProgressPercent = isChunksActive
+    ? Math.round((completedChunksCount / chunks.length) * 100)
+    : 0;
+  // Pratinjau and Lanjut ke Preview buttons can only be active when formasi data exists AND all chunks are 100% completed
+  const isReadyForPreview =
+    detectedFormasis.length > 0 && !isChunksIncomplete && !isQueueRunning && !isLoading;
 
   const filteredPreviewFormasi = detectedFormasis.filter((f) => {
     if (!previewFilter.trim()) return true;
@@ -912,29 +928,44 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
 
             {/* Step 2 Tab */}
             <button
+              type="button"
               onClick={() => {
-                if (detectedFormasis.length > 0) handleProceedToPreview();
+                if (isReadyForPreview) handleProceedToPreview();
               }}
-              className={`flex items-center gap-2.5 p-2.5 rounded-2xl border text-left transition-all cursor-pointer ${
+              disabled={!isReadyForPreview}
+              className={`flex items-center gap-2.5 p-2.5 rounded-2xl border text-left transition-all ${
                 currentStep === 2
-                  ? 'bg-indigo-600/15 border-indigo-500/40 text-white'
-                  : 'bg-slate-950/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
+                  ? 'bg-indigo-600/15 border-indigo-500/40 text-white cursor-default'
+                  : !isReadyForPreview
+                  ? 'bg-slate-950/20 border-slate-800/40 text-slate-600 cursor-not-allowed opacity-60'
+                  : 'bg-slate-950/40 border-slate-800/80 text-slate-400 hover:text-slate-200 cursor-pointer'
               }`}
+              title={
+                !isReadyForPreview
+                  ? isChunksIncomplete
+                    ? `Selesaikan proses seluruh batch (${completedChunksCount}/${chunks.length} batch — ${chunkProgressPercent}%) untuk membuka Step 2`
+                    : 'Unggah dan ekstrak data untuk membuka Step 2'
+                  : 'Klik untuk membuka Step 2: Pratinjau & Simpan'
+              }
             >
               <div
                 className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold font-mono shrink-0 ${
                   currentStep === 2
                     ? 'bg-indigo-500 text-white shadow-sm'
-                    : finalResultReady
+                    : finalResultReady || isChunks100Percent
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                     : 'bg-slate-800 text-slate-400'
                 }`}
               >
-                {finalResultReady ? <Check className="w-3.5 h-3.5" /> : '2'}
+                {finalResultReady || isChunks100Percent ? <Check className="w-3.5 h-3.5" /> : '2'}
               </div>
               <div className="min-w-0">
                 <div className="text-[11px] font-bold truncate leading-tight">Step 2: Pratinjau & Simpan</div>
-                <div className="text-[10px] text-slate-400 truncate">Tabel formasi & simpan ke cloud</div>
+                <div className="text-[10px] text-slate-400 truncate">
+                  {isChunksIncomplete
+                    ? `Menunggu batch (${chunkProgressPercent}%)`
+                    : 'Tabel formasi & simpan ke cloud'}
+                </div>
               </div>
             </button>
           </div>
@@ -1161,14 +1192,41 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                         )}
                       </button>
 
-                      {detectedFormasis.length > 0 && (
+                      {chunks.length > 0 && (
                         <button
                           type="button"
                           onClick={handleProceedToPreview}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                          disabled={!isReadyForPreview}
+                          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-lg ${
+                            !isReadyForPreview
+                              ? 'bg-slate-800/90 text-slate-500 border border-slate-700/60 cursor-not-allowed opacity-75'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 cursor-pointer active:scale-95'
+                          }`}
+                          title={
+                            !isReadyForPreview
+                              ? isChunksIncomplete
+                                ? `Tunggu hingga seluruh batch selesai diproses (${completedChunksCount}/${chunks.length} batch — ${chunkProgressPercent}%)`
+                                : 'Belum ada data formasi yang diekstrak'
+                              : 'Semua batch telah selesai 100%! Klik untuk lanjut ke Preview'
+                          }
                         >
-                          <span>Lanjut ke Preview ({completedChunksCount}/{chunks.length})</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
+                          {isQueueRunning ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                              <span>Memproses ({completedChunksCount}/${chunks.length} — {chunkProgressPercent}%)</span>
+                            </>
+                          ) : isChunksIncomplete ? (
+                            <>
+                              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+                              <span>Lanjut ke Preview ({completedChunksCount}/${chunks.length} — {chunkProgressPercent}%)</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                              <span>Lanjut ke Preview (100% Selesai)</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </>
+                          )}
                         </button>
                       )}
                     </div>
@@ -1228,7 +1286,7 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                     </div>
 
                     <div
-                      className="table-scroll-container border border-slate-800 rounded-2xl overflow-hidden max-h-80 overflow-y-auto bg-slate-950/40 overscroll-contain"
+                      className="table-scroll-container border border-slate-800 rounded-2xl overflow-hidden max-h-80 overflow-y-auto bg-slate-950/40 overscroll-x-contain overscroll-y-auto"
                       data-table-scroll="true"
                     >
                       <table className="w-full text-left border-collapse text-xs">
@@ -1432,7 +1490,7 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
 
               {/* Data Table Scrollable Container */}
               <div
-                className="table-scroll-container border border-slate-800 rounded-2xl overflow-x-auto overflow-y-auto max-h-[460px] min-h-[320px] bg-slate-900 shadow-inner relative overscroll-contain"
+                className="table-scroll-container border border-slate-800 rounded-2xl overflow-x-auto overflow-y-auto max-h-[460px] min-h-[320px] bg-slate-900 shadow-inner relative overscroll-x-contain overscroll-y-auto"
                 data-table-scroll="true"
               >
                 <table className="w-full min-w-[1380px] text-left border-separate border-spacing-0 text-[11px]">
@@ -1671,15 +1729,38 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
               <button
                 type="button"
                 onClick={handleProceedToPreview}
-                disabled={detectedFormasis.length === 0}
-                className={`px-5 py-2.5 font-bold rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg ${
-                  detectedFormasis.length === 0
-                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
+                disabled={!isReadyForPreview}
+                className={`px-5 py-2.5 font-bold rounded-xl text-xs flex items-center gap-2 transition-all shadow-lg ${
+                  !isReadyForPreview
+                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50 opacity-70'
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20 cursor-pointer active:scale-95'
                 }`}
+                title={
+                  !isReadyForPreview
+                    ? isChunksIncomplete
+                      ? `Tunggu hingga proses batch 100% selesai (${completedChunksCount}/${chunks.length} batch — ${chunkProgressPercent}%)`
+                      : 'Unggah file PDF dan lakukan ekstraksi terlebih dahulu'
+                    : 'Lanjut ke Pratinjau Data (Step 2)'
+                }
               >
-                <span>Pratinjau Data (Step 2)</span>
-                <ArrowRight className="w-4 h-4" />
+                {isQueueRunning ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                    <span>Memproses Batch ({completedChunksCount}/${chunks.length})...</span>
+                  </>
+                ) : isChunksIncomplete ? (
+                  <>
+                    <span>Pratinjau Data (Step 2)</span>
+                    <span className="text-[10px] bg-slate-900 text-amber-400 font-mono px-1.5 py-0.5 rounded border border-slate-700">
+                      {chunkProgressPercent}%
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>Pratinjau Data (Step 2)</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             )}
 

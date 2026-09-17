@@ -370,7 +370,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         </div>
 
         {/* USERS LIST TABLE */}
-        <div className="table-scroll-container overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/60 overscroll-contain" data-table-scroll="true">
+        <div className="table-scroll-container overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/60 overscroll-x-contain overscroll-y-auto" data-table-scroll="true">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-900/90 text-slate-400 uppercase text-[10px] font-bold tracking-wider">

@@ -867,7 +867,7 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
 
         {/* Scrollable Table View */}
         <div
-          className="table-scroll-container overflow-auto max-h-[calc(100vh-220px)] min-h-[350px] relative overscroll-contain"
+          className="table-scroll-container overflow-auto max-h-[calc(100vh-220px)] min-h-[350px] relative overscroll-x-contain overscroll-y-auto"
           data-table-scroll="true"
         >
           <table className="w-full text-left border-separate border-spacing-0 text-[11px]">
@@ -1005,7 +1005,7 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
                   </button>
                 </th>
 
-                <th className="p-2 text-right sticky top-0 right-0 z-30 bg-slate-900 border-b border-slate-800 border-l border-slate-800/80 shadow-[-4px_0_10px_rgba(0,0,0,0.4)] whitespace-nowrap">Aksi</th>
+                <th className="p-2 text-right static md:sticky md:top-0 md:right-0 md:z-30 bg-slate-900 border-b border-slate-800 md:border-l border-slate-800/80 md:shadow-[-4px_0_10px_rgba(0,0,0,0.4)] whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-300">
@@ -1117,7 +1117,7 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
                           <span className="text-slate-500 font-mono text-[11px]">-</span>
                         )}
                       </td>
-                      <td className="p-2 text-right sticky right-0 z-10 bg-slate-900 border-l border-slate-800/80 shadow-[-4px_0_10px_rgba(0,0,0,0.4)]">
+                      <td className="p-2 text-right static md:sticky md:right-0 md:z-10 bg-slate-900 md:border-l border-slate-800/80 md:shadow-[-4px_0_10px_rgba(0,0,0,0.4)]">
                         <button
                           onClick={() => onViewPeserta(item.block, item.instansiNama, item.instansiId)}
                           className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg shadow transition-all cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
