@@ -13,7 +13,6 @@ import {
   Database,
   Users,
   GraduationCap,
-  RotateCcw,
   ShieldCheck,
 } from 'lucide-react';
 import { SidebarNavigation } from './components/SidebarNavigation';
@@ -445,24 +444,6 @@ export default function App() {
       );
     }
     if (activeTab === 'formasi') {
-      const hasFilter = selectedInstansiId !== 'ALL' || selectedJenjang !== 'ALL' || !!selectedJurusan;
-      if (hasFilter) {
-        return (
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedInstansiId('ALL');
-              setSelectedJenjang('ALL');
-              setSelectedJurusan('');
-            }}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/50 border border-indigo-500/30 transition-all cursor-pointer"
-            title="Kembalikan semua filter formasi"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span>Reset Filter</span>
-          </button>
-        );
-      }
       return (
         <span className="text-slate-500 text-[11px]">
           {instansiList.length} Instansi Terpantau
@@ -471,16 +452,9 @@ export default function App() {
     }
     if (activeTab === 'instansi') {
       return (
-        <button
-          type="button"
-          onClick={() => {
-            setWizardTargetInstansi(null);
-            setIsWizardOpen(true);
-          }}
-          className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer"
-        >
-          <span>+ Tambah Instansi</span>
-        </button>
+        <span className="text-slate-500 text-[11px]">
+          {instansiList.length} Instansi Terdaftar
+        </span>
       );
     }
     return null;
