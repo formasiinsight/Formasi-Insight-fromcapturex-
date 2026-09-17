@@ -346,11 +346,16 @@ export async function loadInstansiListAsync(forceRefresh = false): Promise<Insta
       let instansiList = sbData.map(dbRowToInstansi);
 
       // Identify instansi needing full formasi hydration:
-      // When parsedData is missing, empty, or has fewer formations than total_formasi in DB
+      // When parsedData is missing, empty, has fewer formations than total_formasi in DB, or is missing analytics
       const instansiNeedingFormasi = instansiList.filter((i) => {
         const expectedTotal = i.totalFormasiDB || i.parsedData?.meta?.totalFormasiCount || 0;
         const currentCount = i.parsedData?.formasiList?.length || 0;
-        return !i.parsedData || currentCount === 0 || (expectedTotal > 0 && currentCount < expectedTotal);
+        const hasMissingAnalytics =
+          currentCount > 0 &&
+          !i.parsedData?.formasiList?.some(
+            (f: any) => f.analytics && (f.analytics.minSkd != null || f.analytics.cutoffNilaiAkhir != null)
+          );
+        return !i.parsedData || currentCount === 0 || (expectedTotal > 0 && currentCount < expectedTotal) || hasMissingAnalytics;
       });
 
       if (instansiNeedingFormasi.length > 0) {
@@ -374,8 +379,13 @@ export async function loadInstansiListAsync(forceRefresh = false): Promise<Insta
               const fRows = formasiByInstansi.get(inst.id);
               const expectedTotal = inst.totalFormasiDB || inst.parsedData?.meta?.totalFormasiCount || 0;
               const currentCount = inst.parsedData?.formasiList?.length || 0;
+              const hasMissingAnalytics =
+                currentCount > 0 &&
+                !inst.parsedData?.formasiList?.some(
+                  (f: any) => f.analytics && (f.analytics.minSkd != null || f.analytics.cutoffNilaiAkhir != null)
+                );
 
-              if (fRows && fRows.length > 0 && (!inst.parsedData || currentCount < (expectedTotal || fRows.length))) {
+              if (fRows && fRows.length > 0 && (!inst.parsedData || currentCount < (expectedTotal || fRows.length) || hasMissingAnalytics)) {
                 const formasiList = fRows.map((r, idx) => formasiDbRowToBlock(r, idx, inst.nama, inst.kode));
                 const totalPeserta = formasiList.reduce((sum, f) => sum + (f.pesertaCount || 0), 0);
                 const defaultHeader = formasiList[0]?.header || {
@@ -461,7 +471,12 @@ export async function loadInstansiListAsync(forceRefresh = false): Promise<Insta
           const inst = instList[i];
           const exp = inst.totalFormasiDB || inst.parsedData?.meta?.totalFormasiCount || 0;
           const cur = inst.parsedData?.formasiList?.length || 0;
-          if (exp > 0 && cur < exp) {
+          const hasMissingAnalytics =
+            cur > 0 &&
+            !inst.parsedData?.formasiList?.some(
+              (f: any) => f.analytics && (f.analytics.minSkd != null || f.analytics.cutoffNilaiAkhir != null)
+            );
+          if (exp > 0 && (cur < exp || hasMissingAnalytics)) {
             try {
               const fRes = await fetch(`/api/formasi?instansi_id=${encodeURIComponent(inst.id)}&limit=5000`);
               if (fRes.ok) {

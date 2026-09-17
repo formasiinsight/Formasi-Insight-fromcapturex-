@@ -12,6 +12,7 @@ import { calculateVerification } from './src/utils/sampleData';
 import { normalizeJenisFormasiHeader } from './src/utils/jenisFormasiUtils';
 import { INITIAL_INSTANSI_LIST } from './src/utils/instansiSeedData';
 import { SSCASNParsedResult, SSCASNPeserta, SSCASNFormasiBlock, InstansiItem } from './src/types';
+import { classifyInstansi, extractInstansiHeaderFromRawText } from './src/utils/instansiClassifier';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Supabase Configuration
@@ -47,6 +48,88 @@ function getValidInstansiId(item: Partial<InstansiItem>): string {
  * metadata summary in the 'instansi' JSON column (all formasi headers and analytics are 100% preserved
  * in the relational 'formasi' table, and participants in the 'peserta' table).
  */
+// Helper to safely compute full analytics for a formasi block from its participants,
+// or fallback to and preserve existing pre-calculated analytics.
+function computeBlockAnalytics(pesertaList: any[], kuota: number, existingAnalytics?: any) {
+  const list = Array.isArray(pesertaList) ? pesertaList : [];
+
+  const parseNum = (val: any) => {
+    if (val === null || val === undefined || val === '' || val === '-') return null;
+    const n = Number(String(val).replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // If no participants present in memory, preserve existing valid analytics
+  if (list.length === 0) {
+    if (existingAnalytics && (existingAnalytics.minSkd !== undefined || existingAnalytics.cutoffNilaiAkhir !== undefined || existingAnalytics.min_skd !== undefined)) {
+      return {
+        totalPesertaSkb: typeof existingAnalytics.totalPesertaSkb === 'number' ? existingAnalytics.totalPesertaSkb : (typeof existingAnalytics.total_peserta_skb === 'number' ? existingAnalytics.total_peserta_skb : 0),
+        totalLulus: typeof existingAnalytics.totalLulus === 'number' ? existingAnalytics.totalLulus : (typeof existingAnalytics.total_lulus === 'number' ? existingAnalytics.total_lulus : 0),
+        rasioKeketatan: existingAnalytics.rasioKeketatan || existingAnalytics.rasio_keketatan || (kuota > 0 ? `1 : ${kuota}` : '-'),
+        minSkd: parseNum(existingAnalytics.minSkd ?? existingAnalytics.min_skd),
+        maxSkd: parseNum(existingAnalytics.maxSkd ?? existingAnalytics.max_skd),
+        minSkb: parseNum(existingAnalytics.minSkb ?? existingAnalytics.min_skb),
+        maxSkb: parseNum(existingAnalytics.maxSkb ?? existingAnalytics.max_skb),
+        cutoffNilaiAkhir: parseNum(existingAnalytics.cutoffNilaiAkhir ?? existingAnalytics.cutoff_nilai_akhir),
+        highestNilaiAkhir: parseNum(existingAnalytics.highestNilaiAkhir ?? existingAnalytics.highest_nilai_akhir),
+      };
+    }
+    return {
+      totalPesertaSkb: 0,
+      totalLulus: 0,
+      rasioKeketatan: kuota > 0 ? `1 : ${kuota}` : '-',
+      minSkd: null,
+      maxSkd: null,
+      minSkb: null,
+      maxSkb: null,
+      cutoffNilaiAkhir: null,
+      highestNilaiAkhir: null,
+    };
+  }
+
+  const totalPesertaSkb = list.length;
+  // SSCASN lulus status: starts with P/L (e.g. P/L, P/L-1, P/L-2, P/L-U3)
+  const lulusList = list.filter((p) => p?.keterangan && String(p.keterangan).trim().toUpperCase().startsWith('P/L'));
+  const totalLulus = lulusList.length;
+
+  // Candidates who passed are preferred for min scores; fallback to all if none passed
+  const passedCandidates = lulusList.length > 0 ? lulusList : list;
+
+  const skdScores = passedCandidates.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
+  const allSkdScores = list.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
+
+  const skbScores = passedCandidates.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
+  const allSkbScores = list.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
+
+  const akhirScores = list.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
+  const lulusAkhirScores = lulusList.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
+
+  const minSkd = skdScores.length > 0 ? Math.min(...skdScores) : (allSkdScores.length > 0 ? Math.min(...allSkdScores) : parseNum(existingAnalytics?.minSkd ?? existingAnalytics?.min_skd));
+  const maxSkd = allSkdScores.length > 0 ? Math.max(...allSkdScores) : parseNum(existingAnalytics?.maxSkd ?? existingAnalytics?.max_skd);
+
+  const minSkb = skbScores.length > 0 ? Math.min(...skbScores) : (allSkbScores.length > 0 ? Math.min(...allSkbScores) : parseNum(existingAnalytics?.minSkb ?? existingAnalytics?.min_skb));
+  const maxSkb = allSkbScores.length > 0 ? Math.max(...allSkbScores) : parseNum(existingAnalytics?.maxSkb ?? existingAnalytics?.max_skb);
+
+  const highestNilaiAkhir = akhirScores.length > 0 ? Math.max(...akhirScores) : parseNum(existingAnalytics?.highestNilaiAkhir ?? existingAnalytics?.highest_nilai_akhir);
+  const cutoffNilaiAkhir = lulusAkhirScores.length > 0 ? Math.min(...lulusAkhirScores) : (akhirScores.length > 0 ? Math.min(...akhirScores) : parseNum(existingAnalytics?.cutoffNilaiAkhir ?? existingAnalytics?.cutoff_nilai_akhir));
+
+  const rasioKeketatan = kuota > 0 && totalPesertaSkb > 0
+    ? `1 : ${(totalPesertaSkb / kuota).toFixed(1)}`
+    : (existingAnalytics?.rasioKeketatan || existingAnalytics?.rasio_keketatan || (totalPesertaSkb > 0 ? `1 : ${totalPesertaSkb}` : '-'));
+
+  return {
+    totalPesertaSkb,
+    totalLulus,
+    rasioKeketatan,
+    minSkd,
+    maxSkd,
+    minSkb,
+    maxSkb,
+    cutoffNilaiAkhir,
+    highestNilaiAkhir,
+  };
+}
+
 function simplifyParsedDataForDatabase(parsedData: any): any {
   if (!parsedData || typeof parsedData !== 'object') return null;
 
@@ -103,6 +186,9 @@ function simplifyParsedDataForDatabase(parsedData: any): any {
       discrepanciesList: [],
     };
 
+    const kuota = Number(f.header?.jumlahKuota) || Number(f.header?.kuotaJabatan) || 1;
+    const analytics = computeBlockAnalytics(fPesertaList, kuota, f.analytics);
+
     return {
       id: f.id || `formasi-${idx + 1}`,
       header: {
@@ -123,6 +209,7 @@ function simplifyParsedDataForDatabase(parsedData: any): any {
       pesertaCount: pCount,
       pesertaList: [], // Stripped for DB JSON storage - hydrated on demand from 'peserta' table
       verification,
+      analytics, // Retain complete analytics in parsed_data
     };
   });
 
@@ -201,43 +288,6 @@ function extractFormasiDbRows(instansiList: InstansiItem[]): any[] {
   for (const instansi of instansiList) {
     if (!instansi.parsedData) continue;
 
-    // Helper to calculate analytics from pesertaList
-    const computeAnalytics = (pesertaList: any[], kuota: number) => {
-      const list = Array.isArray(pesertaList) ? pesertaList : [];
-      const totalPesertaSkb = list.length;
-      
-      const lulusList = list.filter((p) => p.keterangan && String(p.keterangan).trim().startsWith('P/L'));
-      const totalLulus = lulusList.length;
-
-      const skdScores = list.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
-      const skbScores = list.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
-      const akhirScores = list.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
-      const lulusAkhirScores = lulusList.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
-
-      const minSkd = skdScores.length > 0 ? Math.min(...skdScores) : null;
-      const maxSkd = skdScores.length > 0 ? Math.max(...skdScores) : null;
-      const minSkb = skbScores.length > 0 ? Math.min(...skbScores) : null;
-      const maxSkb = skbScores.length > 0 ? Math.max(...skbScores) : null;
-      const highestNilaiAkhir = akhirScores.length > 0 ? Math.max(...akhirScores) : null;
-      
-      // Cut-off is the lowest final score among all PASSED (P/L) candidates
-      const cutoffNilaiAkhir = lulusAkhirScores.length > 0 ? Math.min(...lulusAkhirScores) : (akhirScores.length > 0 ? Math.min(...akhirScores) : null);
-      
-      const rasioKeketatan = kuota > 0 && totalPesertaSkb > 0 ? `1 : ${(totalPesertaSkb / kuota).toFixed(1)}` : (totalPesertaSkb > 0 ? `1 : ${totalPesertaSkb}` : '-');
-
-      return {
-        total_peserta_skb: totalPesertaSkb,
-        total_lulus: totalLulus,
-        rasio_keketatan: rasioKeketatan,
-        min_skd: minSkd,
-        max_skd: maxSkd,
-        min_skb: minSkb,
-        max_skb: maxSkb,
-        cutoff_nilai_akhir: cutoffNilaiAkhir,
-        highest_nilai_akhir: highestNilaiAkhir,
-      };
-    };
-
     // Check if formasiList exists
     const formasiList = instansi.parsedData.formasiList;
     if (Array.isArray(formasiList) && formasiList.length > 0) {
@@ -245,7 +295,7 @@ function extractFormasiDbRows(instansiList: InstansiItem[]): any[] {
         const formasiId = `${instansi.id}-${f.id || `formasi-${idx + 1}`}`;
         const header: any = f.header || {};
         const kuota = Number(header.jumlahKuota) || Number(header.kuotaJabatan) || 1;
-        const analytics = computeAnalytics(f.pesertaList, kuota);
+        const analytics = computeBlockAnalytics(f.pesertaList, kuota, f.analytics);
         
         formasiRows.push({
           id: formasiId,
@@ -256,7 +306,15 @@ function extractFormasiDbRows(instansiList: InstansiItem[]): any[] {
           pendidikan: header.pendidikan || '-',
           jenis_formasi: header.namaJenisFormasi || header.jenisFormasi || 'UMUM',
           kuota,
-          ...analytics,
+          total_peserta_skb: analytics.totalPesertaSkb,
+          total_lulus: analytics.totalLulus,
+          rasio_keketatan: analytics.rasioKeketatan,
+          min_skd: analytics.minSkd,
+          max_skd: analytics.maxSkd,
+          min_skb: analytics.minSkb,
+          max_skb: analytics.maxSkb,
+          cutoff_nilai_akhir: analytics.cutoffNilaiAkhir,
+          highest_nilai_akhir: analytics.highestNilaiAkhir,
           created_at: new Date().toISOString(),
         });
       });
@@ -264,7 +322,7 @@ function extractFormasiDbRows(instansiList: InstansiItem[]): any[] {
       // Single header fallback
       const header: any = instansi.parsedData.header;
       const kuota = Number(header.jumlahKuota) || 1;
-      const analytics = computeAnalytics(instansi.parsedData.pesertaList || [], kuota);
+      const analytics = computeBlockAnalytics(instansi.parsedData.pesertaList || [], kuota, (instansi.parsedData as any).analytics);
       
       formasiRows.push({
         id: `${instansi.id}-formasi-1`,
@@ -275,7 +333,15 @@ function extractFormasiDbRows(instansiList: InstansiItem[]): any[] {
         pendidikan: header.pendidikan || '-',
         jenis_formasi: header.namaJenisFormasi || header.jenisFormasi || 'UMUM',
         kuota,
-        ...analytics,
+        total_peserta_skb: analytics.totalPesertaSkb,
+        total_lulus: analytics.totalLulus,
+        rasio_keketatan: analytics.rasioKeketatan,
+        min_skd: analytics.minSkd,
+        max_skd: analytics.maxSkd,
+        min_skb: analytics.minSkb,
+        max_skb: analytics.maxSkb,
+        cutoff_nilai_akhir: analytics.cutoffNilaiAkhir,
+        highest_nilai_akhir: analytics.highestNilaiAkhir,
         created_at: new Date().toISOString(),
       });
     }
@@ -459,11 +525,18 @@ function formasiDbRowToBlock(row: any, idx: number, instansiNama: string, instan
 function prepareForMemoryCache(item: InstansiItem): InstansiItem {
   if (!item.parsedData) return item;
   const rawFormasi = Array.isArray(item.parsedData.formasiList) ? item.parsedData.formasiList : [];
-  const formasiList = rawFormasi.map((f: any, idx: number) => ({
-    ...f,
-    id: f.id || `formasi-${idx + 1}`,
-    pesertaList: [], // participants stripped from general list, hydrated on-demand
-  }));
+  const formasiList = rawFormasi.map((f: any, idx: number) => {
+    const fPesertaList = Array.isArray(f.pesertaList) ? f.pesertaList : [];
+    const kuota = Number(f.header?.jumlahKuota) || Number(f.header?.kuotaJabatan) || 1;
+    const analytics = computeBlockAnalytics(fPesertaList, kuota, f.analytics);
+
+    return {
+      ...f,
+      id: f.id || `formasi-${idx + 1}`,
+      pesertaList: [], // participants stripped from general list, hydrated on-demand
+      analytics,
+    };
+  });
 
   return {
     ...item,
@@ -478,6 +551,18 @@ function prepareForMemoryCache(item: InstansiItem): InstansiItem {
 // Cloud Persistent Storage Setup
 const DATA_DIR = path.join(process.cwd(), 'data');
 const CLOUD_DB_FILE = path.join(DATA_DIR, 'cloud_instansi_db.json');
+
+// Atomic write to avoid corrupted / partially written JSON files
+async function safeWriteJsonFile(filePath: string, data: any): Promise<void> {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    await fsPromises.mkdir(dir, { recursive: true });
+  }
+  const jsonStr = JSON.stringify(data, null, 2);
+  const tmpFile = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+  await fsPromises.writeFile(tmpFile, jsonStr, 'utf-8');
+  await fsPromises.rename(tmpFile, filePath);
+}
 
 // In-memory cache for ultra-fast response & synchronization
 let memoryInstansiCache: InstansiItem[] = [];
@@ -513,13 +598,17 @@ async function initCloudStorage() {
       if (!error && Array.isArray(data) && data.length > 0) {
         const sbList = data.map(dbRowToInstansi);
 
-        // Hydrate full formations for any instansi with truncated or missing formasiList
+        // Hydrate full formations for any instansi with truncated, missing formasiList, or missing analytics
         for (let i = 0; i < sbList.length; i++) {
           const inst = sbList[i];
           const expCount = inst.totalFormasiDB || 0;
-          const curCount = inst.parsedData?.formasiList?.length || 0;
+          const curForms = inst.parsedData?.formasiList || [];
+          const curCount = curForms.length;
+          const isTruncated = expCount > 0 && curCount < expCount;
+          const hasMissingAnalytics = curForms.length > 0 && !curForms.some((f: any) => f.analytics && (f.analytics.minSkd != null || f.analytics.cutoffNilaiAkhir != null));
+          const needsHydration = expCount > 0 && (isTruncated || hasMissingAnalytics || curCount === 0);
 
-          if (expCount > 0 && curCount < expCount) {
+          if (needsHydration) {
             try {
               const allFormasiRows: any[] = [];
               let fOffset = 0;
@@ -530,6 +619,7 @@ async function initCloudStorage() {
                   .select('*')
                   .eq('instansi_id', inst.id)
                   .range(fOffset, fOffset + 999);
+
                 if (!fErr && Array.isArray(fChunk) && fChunk.length > 0) {
                   allFormasiRows.push(...fChunk);
                   if (fChunk.length < 1000) hasMore = false;
@@ -585,8 +675,8 @@ async function initCloudStorage() {
         lastCloudSyncTime = new Date().toISOString();
         console.log(`[Supabase Cloud] Loaded and synchronized ${memoryInstansiCache.length} records from Supabase.`);
 
-        // Mirror to local file backup
-        await fsPromises.writeFile(CLOUD_DB_FILE, JSON.stringify(memoryInstansiCache, null, 2), 'utf-8');
+        // Mirror to local file backup safely
+        await safeWriteJsonFile(CLOUD_DB_FILE, memoryInstansiCache);
         return;
       } else if (!error && Array.isArray(data)) {
         isSupabaseConnected = true;
@@ -610,7 +700,7 @@ async function initCloudStorage() {
 
     // 3. Fallback to empty catalog
     memoryInstansiCache = [];
-    await fsPromises.writeFile(CLOUD_DB_FILE, JSON.stringify(memoryInstansiCache, null, 2), 'utf-8');
+    await safeWriteJsonFile(CLOUD_DB_FILE, memoryInstansiCache);
     lastCloudSyncTime = new Date().toISOString();
     console.log(`[Cloud DB] Initialized clean cloud database (empty catalog).`);
   } catch (err) {
@@ -631,10 +721,7 @@ async function persistCloudDatabase(data: InstansiItem[]): Promise<void> {
 
   // 1. Write to server local JSON backup first
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      await fsPromises.mkdir(DATA_DIR, { recursive: true });
-    }
-    await fsPromises.writeFile(CLOUD_DB_FILE, JSON.stringify(sanitizedList, null, 2), 'utf-8');
+    await safeWriteJsonFile(CLOUD_DB_FILE, sanitizedList);
   } catch (err: any) {
     console.error('[Cloud DB] Failed to write local backup file:', err);
     throw new Error(`Gagal menyimpan file backup lokal: ${err?.message || err}`);
@@ -826,14 +913,9 @@ async function persistSingleInstansiToCloud(item: InstansiItem): Promise<Instans
   lastCloudSyncTime = new Date().toISOString();
 
   // 3. Update server local JSON backup file asynchronously
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      await fsPromises.mkdir(DATA_DIR, { recursive: true });
-    }
-    await fsPromises.writeFile(CLOUD_DB_FILE, JSON.stringify(memoryInstansiCache, null, 2), 'utf-8');
-  } catch (err: any) {
+  safeWriteJsonFile(CLOUD_DB_FILE, memoryInstansiCache).catch((err) => {
     console.error('[Cloud DB] Failed to update local backup file for single instansi:', err);
-  }
+  });
 
   return cacheItem;
 }
@@ -1003,7 +1085,7 @@ async function startServer() {
       lastCloudSyncTime = new Date().toISOString();
 
       // 1. Update server local JSON backup asynchronously
-      fsPromises.writeFile(CLOUD_DB_FILE, JSON.stringify(memoryInstansiCache, null, 2), 'utf-8').catch((err) => {
+      safeWriteJsonFile(CLOUD_DB_FILE, memoryInstansiCache).catch((err) => {
         console.error('[Cloud DB] Failed to update local backup file on delete:', err);
       });
 
@@ -1324,6 +1406,71 @@ async function startServer() {
       return res.json({ success: true, source: 'cache', data: cached });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Gagal merekonstruksi data instansi lengkap.' });
+    }
+  });
+
+  // API Route: Quick Instansi Header Extraction from PDF page 1
+  app.post('/api/extract-instansi-header', async (req, res) => {
+    try {
+      const { fileData, fileName } = req.body;
+      if (!fileData) {
+        return res.status(400).json({ error: 'fileData tidak ditemukan.' });
+      }
+
+      const fileBuffer = Buffer.from(fileData, 'base64');
+      let extractedText = '';
+
+      // 1. Quick text extraction with pdf-parse
+      try {
+        const parser = new PDFParse({ data: fileBuffer });
+        const textRes = await parser.getText();
+        extractedText = textRes?.text || '';
+        await parser.destroy();
+      } catch (pdfErr) {
+        console.warn('[extract-instansi-header] pdf-parse warning:', pdfErr);
+      }
+
+      // 2. Parse text with pattern classifier
+      let headerResult = extractInstansiHeaderFromRawText(extractedText);
+
+      // 3. Coordinate-based fallback if pdf-parse text didn't match
+      if (!headerResult || !headerResult.nama) {
+        try {
+          const coordResult = await parsePdfWithCoordinates(fileBuffer, fileName || 'doc.pdf', {
+            startPage: 1,
+            endPage: 2,
+          });
+          if (coordResult?.header) {
+            const h = coordResult.header;
+            const nama = h.namaInstansi || h.instansi || '';
+            const kode = h.kodeInstansi || '';
+            if (nama) {
+              const classification = classifyInstansi(nama, kode);
+              headerResult = {
+                nama,
+                kode,
+                kategori: classification.kategori,
+                provinsi: classification.provinsi,
+                tahun: coordResult.meta?.tahun || '2024',
+              };
+            }
+          }
+        } catch (coordErr) {
+          console.warn('[extract-instansi-header] coordinate parse fallback warning:', coordErr);
+        }
+      }
+
+      if (headerResult && headerResult.nama) {
+        return res.json({ success: true, data: headerResult });
+      }
+
+      return res.json({
+        success: false,
+        message: 'Header instansi SSCASN belum dapat diekstrak otomatis. Silakan lengkapi pada form yang tersedia.',
+      });
+    } catch (err: any) {
+      console.error('[extract-instansi-header] Error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Gagal mengekstrak header instansi.' });
     }
   });
 

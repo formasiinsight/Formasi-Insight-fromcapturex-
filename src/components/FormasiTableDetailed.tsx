@@ -866,7 +866,10 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
         </div>
 
         {/* Scrollable Table View */}
-        <div className="overflow-auto max-h-[calc(100vh-220px)] min-h-[350px] relative">
+        <div
+          className="table-scroll-container overflow-auto max-h-[calc(100vh-220px)] min-h-[350px] relative overscroll-contain"
+          data-table-scroll="true"
+        >
           <table className="w-full text-left border-separate border-spacing-0 text-[11px]">
             <thead>
               <tr className="bg-slate-900 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">

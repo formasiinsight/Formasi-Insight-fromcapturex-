@@ -602,7 +602,10 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
 
             {/* INSTANSI COMPARISON CARDS & TABLE */}
             <div className="border border-slate-800 rounded-2xl bg-slate-950/40 overflow-hidden shadow-inner">
-              <div className="overflow-auto max-h-[calc(100vh-180px)] min-h-[400px] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/50">
+              <div
+                className="table-scroll-container overflow-auto max-h-[calc(100vh-180px)] min-h-[400px] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/50 overscroll-contain"
+                data-table-scroll="true"
+              >
                 <table className="w-full text-left border-separate border-spacing-0 text-xs">
                   <thead>
                     <tr className="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800">

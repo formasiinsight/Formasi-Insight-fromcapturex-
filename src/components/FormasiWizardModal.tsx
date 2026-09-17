@@ -31,6 +31,7 @@ import {
 import { InstansiItem, InstansiKategori, SSCASNParsedResult, SSCASNFormasiBlock } from '../types';
 import { calculateVerification, SAMPLE_SSCASN_DATA } from '../utils/sampleData';
 import { getFormasiKuota } from '../utils/kuotaUtils';
+import { classifyInstansi, DAFTAR_PROVINSI_INDONESIA } from '../utils/instansiClassifier';
 import { JurusanListDisplay } from './JurusanListDisplay';
 import { LokasiDisplay } from './LokasiDisplay';
 
@@ -68,19 +69,20 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
   onClose,
   onComplete,
 }) => {
-  // Wizard Active Step: 1 = Instansi Detail, 2 = Upload PDF & Split, 3 = Preview & Konfirmasi
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+  // Wizard Active Step: 1 = Upload PDF & Instansi Details, 2 = Pratinjau & Simpan
+  const [currentStep, setCurrentStep] = useState<1 | 2>(1);
 
-  // STEP 1: Instansi Details State
+  // Instansi Details State
   const [nama, setNama] = useState('');
   const [kode, setKode] = useState('');
   const [kategori, setKategori] = useState<InstansiKategori>('kementerian');
   const [provinsi, setProvinsi] = useState('');
   const [tahun, setTahun] = useState('2024');
   const [notes, setNotes] = useState('');
-  const [step1Error, setStep1Error] = useState('');
+  const [autoDetectedFromPdf, setAutoDetectedFromPdf] = useState(false);
+  const [isAutoDetecting, setIsAutoDetecting] = useState(false);
 
-  // STEP 2: Upload & Split PDF State
+  // Upload & Split PDF State
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
@@ -140,7 +142,6 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
         setCurrentFileName('');
       }
       setCurrentStep(1);
-      setStep1Error('');
       setStep2Error(null);
       setSaveError(null);
       setIsLoading(false);
@@ -155,56 +156,6 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
   }, [initialItem, isOpen]);
 
   if (!isOpen) return null;
-
-  // STEP 1 VALIDATION & PROCEED
-  const validateStep1 = (): boolean => {
-    const trimmedNama = nama.trim();
-    const trimmedKode = kode.trim();
-
-    if (!trimmedNama || !trimmedKode) {
-      setStep1Error('Nama instansi dan Kode instansi wajib diisi sebelum lanjut.');
-      return false;
-    }
-
-    // Validasi 1: Nama instansi dan Kode instansi tidak boleh sama persis
-    if (trimmedNama.toLowerCase() === trimmedKode.toLowerCase()) {
-      setStep1Error('Nama instansi dan Kode instansi tidak boleh sama. Masukkan nama instansi yang valid dan kode instansi BKN.');
-      return false;
-    }
-
-    const cleanNama = trimmedNama.toLowerCase();
-    const cleanKode = trimmedKode.toLowerCase();
-
-    // Validasi 2: Cek apakah nama atau kode sudah terdaftar pada instansi lain
-    if (existingInstansiList && existingInstansiList.length > 0) {
-      const duplicateNama = existingInstansiList.find(
-        (item) => item.id !== initialItem?.id && (item.nama || '').trim().toLowerCase() === cleanNama
-      );
-      if (duplicateNama) {
-        setStep1Error(`Nama instansi "${trimmedNama}" sudah terdaftar di sistem. Nama instansi tidak boleh sama.`);
-        return false;
-      }
-
-      const duplicateKode = existingInstansiList.find(
-        (item) => item.id !== initialItem?.id && (item.kode || '').trim().toLowerCase() === cleanKode
-      );
-      if (duplicateKode) {
-        setStep1Error(`Kode instansi "${trimmedKode}" sudah digunakan oleh "${duplicateKode.nama}". Kode instansi tidak boleh sama.`);
-        return false;
-      }
-    }
-
-    setStep1Error('');
-    return true;
-  };
-
-  const handleNextFromStep1 = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!validateStep1()) {
-      return;
-    }
-    setCurrentStep(2);
-  };
 
   // Helper safe fetch JSON
   const safeFetchJson = async (url: string, options: RequestInit) => {
@@ -410,6 +361,45 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
       setDetectedFormasis([]);
       setFinalResultReady(null);
       lastHeaderRef.current = null;
+
+      // Extract first 1-2 pages to auto-detect Instansi Identity (Nama, Kode, Kategori, Wilayah)
+      try {
+        setIsAutoDetecting(true);
+        setLoadingStep('Mendeteksi identitas instansi & wilayah dari dokumen PDF...');
+        const detectDoc = await PDFDocument.create();
+        const maxPagesToDetect = Math.min(2, numPages);
+        const pageIndices = Array.from({ length: maxPagesToDetect }, (_, i) => i);
+        const copiedPages = await detectDoc.copyPages(pdfDoc, pageIndices);
+        copiedPages.forEach((p) => detectDoc.addPage(p));
+        const detectBase64 = await detectDoc.saveAsBase64();
+
+        const detectRes = await fetch('/api/extract-instansi-header', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileData: detectBase64,
+            fileName: file.name,
+          }),
+        });
+
+        if (detectRes.ok) {
+          const detectData = await detectRes.json();
+          if (detectData.success && detectData.data) {
+            const d = detectData.data;
+            if (d.nama) setNama(d.nama);
+            if (d.kode) setKode(d.kode);
+            if (d.kategori) setKategori(d.kategori);
+            if (d.provinsi) setProvinsi(d.provinsi);
+            if (d.tahun) setTahun(d.tahun);
+            setAutoDetectedFromPdf(true);
+          }
+        }
+      } catch (detectErr) {
+        console.warn('[handleFile] Header auto-detection warning:', detectErr);
+      } finally {
+        setIsAutoDetecting(false);
+      }
+
       setIsLoading(false);
     } catch (err: any) {
       console.error('PDF parsing error:', err);
@@ -476,6 +466,21 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
         0
       );
 
+      // Fallback: auto-populate instansi fields if not yet set
+      if (data.header) {
+        const h = data.header;
+        const candidateNama = h.namaInstansi || h.instansi || '';
+        const candidateKode = h.kodeInstansi || '';
+        if (candidateNama && (!nama || !autoDetectedFromPdf)) {
+          setNama(candidateNama);
+          const cls = classifyInstansi(candidateNama, candidateKode);
+          setKategori(cls.kategori);
+          if (cls.provinsi && !provinsi) setProvinsi(cls.provinsi);
+          if (candidateKode && !kode) setKode(candidateKode);
+          setAutoDetectedFromPdf(true);
+        }
+      }
+
       setDetectedFormasis((prev) => {
         if (batchFormasis.length > 0) {
           return mergeFormasis(prev, batchFormasis);
@@ -536,11 +541,43 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
     setDetectedFormasis(SAMPLE_SSCASN_DATA.formasiList);
     setFinalResultReady(SAMPLE_SSCASN_DATA);
     setCurrentFileName('SAMPLE_HASIL_INTEGRASI_CPNS_2024.pdf');
-    setCurrentStep(3);
+    setCurrentStep(2);
   };
 
-  // Final confirmation to Step 3
+  // Final confirmation to Step 2 (Pratinjau)
   const handleProceedToPreview = () => {
+    const trimmedNama = nama.trim();
+    const trimmedKode = kode.trim();
+
+    if (!trimmedNama || !trimmedKode) {
+      setStep2Error('Nama Instansi dan Kode Instansi wajib diisi pada formulir identitas instansi di bawah upload area sebelum melanjutkan ke pratinjau.');
+      return;
+    }
+
+    if (trimmedNama.toLowerCase() === trimmedKode.toLowerCase()) {
+      setStep2Error('Nama instansi dan Kode instansi tidak boleh sama. Masukkan nama instansi yang valid dan kode instansi BKN.');
+      return;
+    }
+
+    if (existingInstansiList && existingInstansiList.length > 0) {
+      const cleanNama = trimmedNama.toLowerCase();
+      const cleanKode = trimmedKode.toLowerCase();
+      const duplicateNama = existingInstansiList.find(
+        (item) => item.id !== initialItem?.id && (item.nama || '').trim().toLowerCase() === cleanNama
+      );
+      if (duplicateNama) {
+        setStep2Error(`Nama instansi "${trimmedNama}" sudah terdaftar di sistem. Silakan sesuaikan.`);
+        return;
+      }
+      const duplicateKode = existingInstansiList.find(
+        (item) => item.id !== initialItem?.id && (item.kode || '').trim().toLowerCase() === cleanKode
+      );
+      if (duplicateKode) {
+        setStep2Error(`Kode instansi "${trimmedKode}" sudah digunakan oleh "${duplicateKode.nama}". Silakan sesuaikan.`);
+        return;
+      }
+    }
+
     if (detectedFormasis.length === 0) {
       setStep2Error('Belum ada formasi yang diekstrak. Silakan jalankan proses parsing PDF terlebih dahulu.');
       return;
@@ -573,7 +610,7 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
 
     setFinalResultReady(aggregatedResult);
     setStep2Error(null);
-    setCurrentStep(3);
+    setCurrentStep(2);
   };
 
   // Final Complete Handler
@@ -621,6 +658,193 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
     return jab.includes(q) || pen.includes(q) || lok.includes(q);
   });
 
+  // Reusable Instansi Fields Component rendered directly in Step 1
+  const renderInstansiFields = () => (
+    <div className="bg-slate-950/75 border border-slate-800/90 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
+              autoDetectedFromPdf
+                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                : 'bg-indigo-500/15 border-indigo-500/30 text-indigo-400'
+            }`}
+          >
+            {autoDetectedFromPdf ? <Sparkles className="w-5 h-5" /> : <Building2 className="w-5 h-5" />}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-bold text-white">Identitas & Kategori Instansi</h3>
+              {autoDetectedFromPdf ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold shadow-sm">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Terisi Otomatis dari Berkas PDF BKN
+                </span>
+              ) : isAutoDetecting ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold animate-pulse">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Mendeteksi Dokumen...
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-medium">
+                  Auto-fill saat PDF diunggah
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {autoDetectedFromPdf
+                ? 'Data nama, kode, dan wilayah di bawah otomatis terdeteksi dari lembar pengumuman PDF. Anda masih dapat mengedit atau menyesuaikannya jika ada yang perlu dikoreksi.'
+                : 'Field di bawah otomatis terisi setelah Anda memilih file PDF di atas, atau dapat Anda lengkapi secara manual.'}
+            </p>
+          </div>
+        </div>
+
+        {autoDetectedFromPdf && (
+          <button
+            type="button"
+            onClick={() => {
+              setAutoDetectedFromPdf(false);
+            }}
+            className="text-[11px] text-slate-400 hover:text-indigo-300 transition-colors flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+            title="Izinkan edit manual bebas"
+          >
+            <span>Edit Bebas</span>
+          </button>
+        )}
+      </div>
+
+      {/* Form Fields Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Nama Instansi */}
+        <div className="sm:col-span-2 space-y-1.5">
+          <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span>Nama Instansi Lengkap</span>
+              <span className="text-rose-400">*</span>
+            </span>
+            {autoDetectedFromPdf && (
+              <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                <Check className="w-3 h-3" /> Auto-detected
+              </span>
+            )}
+          </label>
+          <input
+            type="text"
+            value={nama}
+            onChange={(e) => {
+              setNama(e.target.value);
+              if (step2Error) setStep2Error(null);
+            }}
+            placeholder="Contoh: Kementerian Kesehatan, Pemerintah Kab. Banyuwangi"
+            className={`w-full bg-slate-900 border rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 transition-all ${
+              autoDetectedFromPdf
+                ? 'border-emerald-500/40 focus:border-emerald-500 focus:ring-emerald-500/30'
+                : 'border-slate-700/80 focus:border-indigo-500 focus:ring-indigo-500/30'
+            }`}
+          />
+        </div>
+
+        {/* Kode BKN */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span>Kode Instansi (BKN)</span>
+              <span className="text-rose-400">*</span>
+            </span>
+            {kode && (
+              <span className="text-[10px] text-indigo-400 font-mono font-medium">BKN Code</span>
+            )}
+          </label>
+          <input
+            type="text"
+            value={kode}
+            onChange={(e) => {
+              setKode(e.target.value);
+              if (step2Error) setStep2Error(null);
+            }}
+            placeholder="Contoh: 4001 / 6511"
+            className={`w-full bg-slate-900 border rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:ring-1 transition-all ${
+              autoDetectedFromPdf
+                ? 'border-emerald-500/40 focus:border-emerald-500 focus:ring-emerald-500/30'
+                : 'border-slate-700/80 focus:border-indigo-500 focus:ring-indigo-500/30'
+            }`}
+          />
+        </div>
+
+        {/* Kategori Wilayah / Lembaga */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+            <span>Kategori Wilayah / Lembaga</span>
+            <span className="text-[10px] text-indigo-400 font-medium">Klasifikasi</span>
+          </label>
+          <select
+            value={kategori}
+            onChange={(e) => setKategori(e.target.value as InstansiKategori)}
+            className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer"
+          >
+            <option value="kementerian">Kementerian</option>
+            <option value="lembaga">Lembaga Negara / Non-Kementerian (LPNK)</option>
+            <option value="pemprov">Pemerintah Provinsi (Pemprov)</option>
+            <option value="pemkab_pemkot">Pemerintah Kabupaten / Kota (Pemda)</option>
+          </select>
+        </div>
+
+        {/* Provinsi (Wilayah) */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+            <span>Provinsi Wilayah (Opsional)</span>
+            {provinsi && (
+              <span className="text-[11px] text-indigo-300 font-medium truncate max-w-[120px]">{provinsi}</span>
+            )}
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              list="wizard-provinsi-list"
+              value={provinsi}
+              onChange={(e) => setProvinsi(e.target.value)}
+              placeholder="Pilih atau ketik nama provinsi..."
+              className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+            />
+            <datalist id="wizard-provinsi-list">
+              {DAFTAR_PROVINSI_INDONESIA.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+          </div>
+        </div>
+
+        {/* Tahun Pengadaan */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-300">
+            Tahun Seleksi CASN
+          </label>
+          <input
+            type="text"
+            value={tahun}
+            onChange={(e) => setTahun(e.target.value)}
+            placeholder="2024"
+            className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+          />
+        </div>
+
+        {/* Catatan Formasi */}
+        <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
+          <label className="text-xs font-semibold text-slate-300">
+            Catatan Formasi (Opsional)
+          </label>
+          <textarea
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Catatan tambahan mengenai berkas atau formasi..."
+            className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
+          />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
       <div className="bg-slate-900 border border-slate-800 w-full max-w-6xl 2xl:max-w-7xl my-auto rounded-3xl shadow-2xl flex flex-col overflow-hidden text-white max-h-[92vh]">
@@ -644,7 +868,7 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                   )}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Alur 3 langkah terpadu: Detail Instansi &rarr; Ekstraksi PDF & Split &rarr; Pratinjau & Simpan
+                  Alur 2 langkah terpadu: Upload PDF & Identitas Instansi &rarr; Pratinjau & Simpan
                 </p>
               </div>
             </div>
@@ -659,7 +883,7 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
           </div>
 
           {/* Stepper Navigation */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-4 pt-1">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 pt-1">
             {/* Step 1 Tab */}
             <button
               onClick={() => setCurrentStep(1)}
@@ -673,23 +897,23 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                 className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold font-mono shrink-0 ${
                   currentStep === 1
                     ? 'bg-indigo-500 text-white shadow-sm'
-                    : nama
+                    : detectedFormasis.length > 0 && nama
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                     : 'bg-slate-800 text-slate-400'
                 }`}
               >
-                {nama ? <Check className="w-3.5 h-3.5" /> : '1'}
+                {detectedFormasis.length > 0 && nama ? <Check className="w-3.5 h-3.5" /> : '1'}
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-bold truncate leading-tight">Step 1: Instansi Detail</div>
-                <div className="text-[10px] text-slate-400 truncate">Nama, kode, wilayah</div>
+                <div className="text-[11px] font-bold truncate leading-tight">Step 1: Upload & Ekstraksi PDF</div>
+                <div className="text-[10px] text-slate-400 truncate">Unggah berkas & identitas instansi</div>
               </div>
             </button>
 
             {/* Step 2 Tab */}
             <button
               onClick={() => {
-                if (validateStep1()) setCurrentStep(2);
+                if (detectedFormasis.length > 0) handleProceedToPreview();
               }}
               className={`flex items-center gap-2.5 p-2.5 rounded-2xl border text-left transition-all cursor-pointer ${
                 currentStep === 2
@@ -701,44 +925,16 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                 className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold font-mono shrink-0 ${
                   currentStep === 2
                     ? 'bg-indigo-500 text-white shadow-sm'
-                    : detectedFormasis.length > 0
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                {detectedFormasis.length > 0 ? <Check className="w-3.5 h-3.5" /> : '2'}
-              </div>
-              <div className="min-w-0">
-                <div className="text-[11px] font-bold truncate leading-tight">Step 2: Upload & Split PDF</div>
-                <div className="text-[10px] text-slate-400 truncate">Ekstraksi halaman PDF</div>
-              </div>
-            </button>
-
-            {/* Step 3 Tab */}
-            <button
-              onClick={() => {
-                if (detectedFormasis.length > 0) handleProceedToPreview();
-              }}
-              className={`flex items-center gap-2.5 p-2.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                currentStep === 3
-                  ? 'bg-indigo-600/15 border-indigo-500/40 text-white'
-                  : 'bg-slate-950/40 border-slate-800/80 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <div
-                className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold font-mono shrink-0 ${
-                  currentStep === 3
-                    ? 'bg-indigo-500 text-white shadow-sm'
                     : finalResultReady
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                     : 'bg-slate-800 text-slate-400'
                 }`}
               >
-                3
+                {finalResultReady ? <Check className="w-3.5 h-3.5" /> : '2'}
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-bold truncate leading-tight">Step 3: Preview</div>
-                <div className="text-[10px] text-slate-400 truncate">Tabel & verifikasi data</div>
+                <div className="text-[11px] font-bold truncate leading-tight">Step 2: Pratinjau & Simpan</div>
+                <div className="text-[10px] text-slate-400 truncate">Tabel formasi & simpan ke cloud</div>
               </div>
             </button>
           </div>
@@ -807,114 +1003,9 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
           )}
 
           {/* ----------------------------------------------------------------------- */}
-          {/* STEP 1: INSTANSI DETAIL FORM */}
+          {/* STEP 1: UPLOAD PDF & EKSTRAKSI DOKUMEN + IDENTITAS INSTANSI */}
           {/* ----------------------------------------------------------------------- */}
           {currentStep === 1 && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              <div className="bg-indigo-950/20 border border-indigo-500/20 rounded-2xl p-4 flex items-start gap-3">
-                <Building2 className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
-                <div className="text-xs text-indigo-200 leading-relaxed">
-                  <span className="font-bold text-white block mb-0.5">Langkah 1: Identitas & Metadata Instansi</span>
-                  Masukkan identitas instansi CPNS yang akan ditambahkan atau diperbarui. Pastikan kode BKN terisi sesuai kode resmi agar memudahkan pencarian formasi.
-                </div>
-              </div>
-
-              {step1Error && (
-                <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{step1Error}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Nama Instansi */}
-                <div className="sm:col-span-2 space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <span>Nama Instansi</span>
-                    <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={nama}
-                    onChange={(e) => {
-                      setNama(e.target.value);
-                      if (step1Error) setStep1Error('');
-                    }}
-                    placeholder="Contoh: Kementerian Kesehatan, Pemkab Banyuwangi"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
-                </div>
-
-                {/* Kode BKN */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <span>Kode Instansi (BKN)</span>
-                    <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={kode}
-                    onChange={(e) => {
-                      setKode(e.target.value);
-                      if (step1Error) setStep1Error('');
-                    }}
-                    placeholder="Contoh: 4001, 6511"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
-                </div>
-
-                {/* Kategori */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">
-                    Kategori Wilayah / Lembaga
-                  </label>
-                  <select
-                    value={kategori}
-                    onChange={(e) => setKategori(e.target.value as InstansiKategori)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
-                  >
-                    <option value="kementerian">Kementerian</option>
-                    <option value="lembaga">Lembaga Negara / Non-Kementerian</option>
-                    <option value="pemprov">Pemerintah Provinsi (Pemprov)</option>
-                    <option value="pemkab_pemkot">Pemerintah Kab / Kota (Pemda)</option>
-                  </select>
-                </div>
-
-                {/* Tahun Pengadaan */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">
-                    Tahun Seleksi CASN
-                  </label>
-                  <input
-                    type="text"
-                    value={tahun}
-                    onChange={(e) => setTahun(e.target.value)}
-                    placeholder="2024"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
-                </div>
-
-                {/* Catatan Tambahan */}
-                <div className="sm:col-span-2 space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">
-                    Catatan Formasi (Opsional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Catatan tambahan mengenai berkas atau formasi..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ----------------------------------------------------------------------- */}
-          {/* STEP 2: UPLOAD PDF & SPLIT CHUNKS */}
-          {/* ----------------------------------------------------------------------- */}
-          {currentStep === 2 && (
             <div className="space-y-6 animate-in fade-in duration-200">
               {step2Error && (
                 <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-300 text-xs flex items-center gap-2">
@@ -929,8 +1020,8 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                   <div className="bg-indigo-950/20 border border-indigo-500/20 rounded-2xl p-4 flex items-start gap-3">
                     <FileUp className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                     <div className="text-xs text-indigo-200 leading-relaxed">
-                      <span className="font-bold text-white block mb-0.5">Langkah 2: Upload & Ekstraksi PDF Hasil Integrasi SKD & SKB</span>
-                      Upload dokumen PDF pengumuman resmi CASN. Dokumen akan diproses otomatis secara stabil per 100 halaman per batch.
+                      <span className="font-bold text-white block mb-0.5">Langkah 1: Upload & Ekstraksi PDF Hasil Integrasi SKD & SKB</span>
+                      Upload dokumen PDF pengumuman resmi CASN. Nama dan kode instansi akan otomatis terdeteksi dari dokumen (atau dapat diisi/diedit manual di formulir bawah).
                     </div>
                   </div>
 
@@ -986,6 +1077,9 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* Render Instansi Fields right under the upload area in Step 1 */}
+                  {renderInstansiFields()}
                 </>
               )}
 
@@ -1080,6 +1174,9 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Render Instansi Fields directly under the batch manager controls in Step 1 */}
+                  {renderInstansiFields()}
+
                   {/* REALTIME STATS GRID (STATUS -> TOTAL KUOTA -> TOTAL FORMASI -> TOTAL PESERTA) */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {/* 1. STATUS */}
@@ -1130,7 +1227,10 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                       </p>
                     </div>
 
-                    <div className="border border-slate-800 rounded-2xl overflow-hidden max-h-80 overflow-y-auto bg-slate-950/40">
+                    <div
+                      className="table-scroll-container border border-slate-800 rounded-2xl overflow-hidden max-h-80 overflow-y-auto bg-slate-950/40 overscroll-contain"
+                      data-table-scroll="true"
+                    >
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
                           <tr className="bg-slate-900/90 text-slate-400 border-b border-slate-800 font-semibold sticky top-0 backdrop-blur-xs">
@@ -1236,9 +1336,9 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
           )}
 
           {/* ----------------------------------------------------------------------- */}
-          {/* STEP 3: PREVIEW & CONFIRMATION TABLE */}
+          {/* STEP 2: PREVIEW & CONFIRMATION TABLE */}
           {/* ----------------------------------------------------------------------- */}
-          {currentStep === 3 && (
+          {currentStep === 2 && (
             <div className="space-y-6 animate-in fade-in duration-200">
               {saveError && (
                 <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-start gap-3 text-rose-300 animate-in fade-in">
@@ -1258,7 +1358,7 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
               <div className="bg-indigo-950/20 border border-indigo-500/20 rounded-2xl p-4 flex items-start gap-3">
                 <Eye className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-indigo-200 leading-relaxed">
-                  <span className="font-bold text-white block mb-0.5">Langkah 3: Pratinjau & Konfirmasi Data Formasi</span>
+                  <span className="font-bold text-white block mb-0.5">Langkah 2: Pratinjau & Konfirmasi Data Formasi</span>
                   Periksa ringkasan hasil parsing formasi jabatan, kualifikasi pendidikan, dan kuota sebelum disimpan ke database Cloud.
                 </div>
               </div>
@@ -1331,7 +1431,10 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
               </div>
 
               {/* Data Table Scrollable Container */}
-              <div className="border border-slate-800 rounded-2xl overflow-x-auto overflow-y-auto max-h-[460px] min-h-[320px] bg-slate-900 shadow-inner relative">
+              <div
+                className="table-scroll-container border border-slate-800 rounded-2xl overflow-x-auto overflow-y-auto max-h-[460px] min-h-[320px] bg-slate-900 shadow-inner relative overscroll-contain"
+                data-table-scroll="true"
+              >
                 <table className="w-full min-w-[1380px] text-left border-separate border-spacing-0 text-[11px]">
                   <thead>
                     <tr className="bg-slate-900 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
@@ -1364,7 +1467,15 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                         const ratio = numRatio.toFixed(1);
 
                         const passed = pList.filter((p: any) => p?.keterangan && String(p.keterangan).trim().startsWith('P/L'));
-                        const cut = passed.length > 0 ? Math.min(...passed.map((p: any) => Number(p.nilaiAkhir) || 0)).toFixed(3) : '-';
+                        const analytics = block.analytics;
+
+                        // Cut-off calculation with fallback to pre-calculated block.analytics
+                        let cut = '-';
+                        if (passed.length > 0) {
+                          cut = Math.min(...passed.map((p: any) => Number(p.nilaiAkhir) || 0)).toFixed(3);
+                        } else if (analytics?.cutoffNilaiAkhir != null && Number.isFinite(Number(analytics.cutoffNilaiAkhir))) {
+                          cut = Number(analytics.cutoffNilaiAkhir).toFixed(3);
+                        }
 
                         let ratioBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
                         if (numRatio > 3) {
@@ -1376,21 +1487,29 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                         }
 
                         let minSkdPeserta: any = null;
+                        let fallbackMinSkdVal: number | null = null;
                         if (passed.length > 0) {
                           minSkdPeserta = passed.reduce((min: any, p: any) => (Number(p.totalSkd || 0) < Number(min.totalSkd || 0) ? p : min), passed[0]);
+                        } else if (analytics?.minSkd != null && Number.isFinite(Number(analytics.minSkd))) {
+                          fallbackMinSkdVal = Number(analytics.minSkd);
                         }
 
                         let skdBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
-                        if (minSkdPeserta) {
-                          const skdVal = Number(minSkdPeserta.totalSkd) || 0;
-                          if (skdVal > 440) skdBadgeStyle = 'bg-rose-500/10 text-rose-300 border-rose-500/20';
-                          else if (skdVal >= 400) skdBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
+                        const activeMinSkd = minSkdPeserta ? (Number(minSkdPeserta.totalSkd) || 0) : fallbackMinSkdVal;
+                        if (activeMinSkd != null && activeMinSkd > 0) {
+                          if (activeMinSkd > 440) skdBadgeStyle = 'bg-rose-500/10 text-rose-300 border-rose-500/20';
+                          else if (activeMinSkd >= 400) skdBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
                           else skdBadgeStyle = 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
                         }
 
                         let minSkbVal = '-';
                         if (passed.length > 0) {
                           const minSkbNum = Math.min(...passed.map((p: any) => Number(p.skb) || 0));
+                          if (minSkbNum > 0) {
+                            minSkbVal = minSkbNum % 1 === 0 ? minSkbNum.toString() : minSkbNum.toFixed(2);
+                          }
+                        } else if (analytics?.minSkb != null && Number.isFinite(Number(analytics.minSkb))) {
+                          const minSkbNum = Number(analytics.minSkb);
                           if (minSkbNum > 0) {
                             minSkbVal = minSkbNum % 1 === 0 ? minSkbNum.toString() : minSkbNum.toFixed(2);
                           }
@@ -1479,6 +1598,10 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                                     {minSkdPeserta.twk} &bull; {minSkdPeserta.tiu} &bull; {minSkdPeserta.tkp}
                                   </span>
                                 </div>
+                              ) : fallbackMinSkdVal != null ? (
+                                <span className={`font-mono font-extrabold text-[11px] px-2 py-0.5 rounded-md border inline-block whitespace-nowrap ${skdBadgeStyle}`}>
+                                  {fallbackMinSkdVal}
+                                </span>
                               ) : (
                                 <span className="text-slate-500 font-mono text-[11px]">-</span>
                               )}
@@ -1547,17 +1670,6 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
             {currentStep === 1 && (
               <button
                 type="button"
-                onClick={handleNextFromStep1}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-indigo-600/20"
-              >
-                <span>Lanjut ke Upload PDF (Step 2)</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            )}
-
-            {currentStep === 2 && (
-              <button
-                type="button"
                 onClick={handleProceedToPreview}
                 disabled={detectedFormasis.length === 0}
                 className={`px-5 py-2.5 font-bold rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg ${
@@ -1566,12 +1678,12 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                     : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
                 }`}
               >
-                <span>Pratinjau Data (Step 3)</span>
+                <span>Pratinjau Data (Step 2)</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
 
-            {currentStep === 3 && (
+            {currentStep === 2 && (
               <button
                 type="button"
                 onClick={handleFinalSave}

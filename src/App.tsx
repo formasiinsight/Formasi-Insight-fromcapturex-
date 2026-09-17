@@ -6,7 +6,7 @@ import { FormasiTableDetailed } from './components/FormasiTableDetailed';
 import { InstansiManager } from './components/InstansiManager';
 import { UserManagement } from './components/UserManagement';
 import { LoginPage } from './components/LoginPage';
-import { PesertaDetailModal } from './components/PesertaDetailModal';
+import { FormasiDetailPage } from './components/FormasiDetailPage';
 import { InstansiFormModal } from './components/InstansiFormModal';
 import { FileUploadModal } from './components/FileUploadModal';
 import { JsonViewerModal } from './components/JsonViewerModal';
@@ -62,6 +62,7 @@ export default function App() {
   }, [currentUser, activeTab]);
 
   const handleTabChange = (newTab: 'dashboard' | 'formasi' | 'instansi' | 'users') => {
+    setPesertaModalFormasi(null);
     if (currentUser?.role !== 'admin' && (newTab === 'instansi' || newTab === 'users')) {
       setActiveTab('dashboard');
       return;
@@ -74,11 +75,12 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  // Modal States
+  // Dedicated Detail Formasi View / Page State
   const [pesertaModalFormasi, setPesertaModalFormasi] = useState<{
     block: SSCASNFormasiBlock;
     instansiNama: string;
     instansiId?: string;
+    fromTab?: 'dashboard' | 'formasi';
   } | null>(null);
 
   const [uploadModalTargetId, setUploadModalTargetId] = useState<string | null>(null);
@@ -308,125 +310,157 @@ export default function App() {
       {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-          {/* TAB 1: DASHBOARD ANALYTICS */}
-          {activeTab === 'dashboard' && (
-            <DashboardAnalytics
-              instansi={selectedInstansi}
-              instansiList={instansiList}
-              selectedJenjang={selectedJenjang}
-              onSelectJenjang={setSelectedJenjang}
-              selectedJurusan={selectedJurusan}
-              onSelectJurusan={setSelectedJurusan}
-              onSelectInstansi={(inst) => setSelectedInstansiId(inst.id)}
-              onGoToUpload={(instansiId) => {
-                if (currentUser.role === 'admin') {
-                  setUploadModalTargetId(instansiId);
-                } else {
-                  alert('Akses Dibatasi: Upload PDF & Kelola Formasi hanya dapat dilakukan oleh Administrator.');
-                }
+          {/* DEDICATED FULL-PAGE VIEW: DETAIL FORMASI & BREADCRUMBS */}
+          {pesertaModalFormasi ? (
+            <FormasiDetailPage
+              key={`${pesertaModalFormasi?.instansiId || ''}-${pesertaModalFormasi?.block?.id || ''}`}
+              formasi={pesertaModalFormasi?.block || null}
+              instansiNama={pesertaModalFormasi?.instansiNama || ''}
+              instansiId={pesertaModalFormasi?.instansiId}
+              fromTab={pesertaModalFormasi?.fromTab || activeTab}
+              onBack={() => setPesertaModalFormasi(null)}
+              onNavigate={(tab) => {
+                setPesertaModalFormasi(null);
+                setActiveTab(tab);
               }}
-              onGoToFormasiTab={() => setActiveTab('formasi')}
-              onViewPeserta={(block, instansiNama) => {
-                setPesertaModalFormasi({ block, instansiNama, instansiId: selectedInstansi?.id });
+              onSelectInstansi={(instId) => {
+                setSelectedInstansiId(instId);
+                setPesertaModalFormasi(null);
+                setActiveTab('formasi');
               }}
+              onUpdatePesertaList={handleUpdatePesertaFromModal}
             />
-          )}
+          ) : (
+            <>
+              {/* TAB 1: DASHBOARD ANALYTICS */}
+              {activeTab === 'dashboard' && (
+                <DashboardAnalytics
+                  instansi={selectedInstansi}
+                  instansiList={instansiList}
+                  selectedJenjang={selectedJenjang}
+                  onSelectJenjang={setSelectedJenjang}
+                  selectedJurusan={selectedJurusan}
+                  onSelectJurusan={setSelectedJurusan}
+                  onSelectInstansi={(inst) => setSelectedInstansiId(inst.id)}
+                  onGoToUpload={(instansiId) => {
+                    if (currentUser.role === 'admin') {
+                      setUploadModalTargetId(instansiId);
+                    } else {
+                      alert('Akses Dibatasi: Upload PDF & Kelola Formasi hanya dapat dilakukan oleh Administrator.');
+                    }
+                  }}
+                  onGoToFormasiTab={() => setActiveTab('formasi')}
+                  onViewPeserta={(block, instansiNama) => {
+                    setPesertaModalFormasi({
+                      block,
+                      instansiNama,
+                      instansiId: selectedInstansi?.id,
+                      fromTab: 'dashboard',
+                    });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              )}
 
-          {/* TAB 2: FORMASI INSTANSI & FILTER JURUSAN */}
-          {activeTab === 'formasi' && (
-            <FormasiTableDetailed
-              instansiList={instansiList}
-              selectedInstansiId={selectedInstansiId}
-              onSelectInstansiId={setSelectedInstansiId}
-              selectedJenjang={selectedJenjang}
-              onSelectJenjang={setSelectedJenjang}
-              selectedJurusan={selectedJurusan}
-              onSelectJurusan={setSelectedJurusan}
-              onViewPeserta={(block, instansiNama, instansiId) => {
-                setPesertaModalFormasi({
-                  block,
-                  instansiNama,
-                  instansiId: instansiId || (selectedInstansiId !== 'ALL' ? selectedInstansiId : undefined),
-                });
-              }}
-            />
-          )}
+              {/* TAB 2: FORMASI INSTANSI & FILTER JURUSAN */}
+              {activeTab === 'formasi' && (
+                <FormasiTableDetailed
+                  instansiList={instansiList}
+                  selectedInstansiId={selectedInstansiId}
+                  onSelectInstansiId={setSelectedInstansiId}
+                  selectedJenjang={selectedJenjang}
+                  onSelectJenjang={setSelectedJenjang}
+                  selectedJurusan={selectedJurusan}
+                  onSelectJurusan={setSelectedJurusan}
+                  onViewPeserta={(block, instansiNama, instansiId) => {
+                    setPesertaModalFormasi({
+                      block,
+                      instansiNama,
+                      instansiId: instansiId || (selectedInstansiId !== 'ALL' ? selectedInstansiId : undefined),
+                      fromTab: 'formasi',
+                    });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              )}
 
-          {/* TAB 3: INSTANSI TERDAFTAR MANAGEMENT (ADMIN ONLY) */}
-          {activeTab === 'instansi' && (
-            currentUser.role === 'admin' ? (
-              <InstansiManager
-                instansiList={instansiList}
-                onSelectForDashboard={(inst) => {
-                  setSelectedInstansiId(inst.id);
-                  setActiveTab('dashboard');
-                }}
-                onSelectForFormasi={(inst) => {
-                  setSelectedInstansiId(inst.id);
-                  setActiveTab('formasi');
-                }}
-                onOpenUploadModal={(id) => {
-                  const target = instansiList.find((i) => i.id === id) || null;
-                  setWizardTargetInstansi(target);
-                  setIsWizardOpen(true);
-                }}
-                onOpenAddModal={() => {
-                  setWizardTargetInstansi(null);
-                  setIsWizardOpen(true);
-                }}
-                onOpenEditModal={(inst) => {
-                  setWizardTargetInstansi(inst);
-                  setIsWizardOpen(true);
-                }}
-                onOpenJsonModal={(parsedData) => setJsonModalData(parsedData)}
-                onDeleteInstansi={handleDeleteInstansi}
-                onListUpdated={(newList) => setInstansiList(newList)}
-              />
-            ) : (
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-lg mx-auto mt-12 shadow-2xl">
-                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-4">
-                  <Lock className="w-8 h-8" />
-                </div>
-                <h3 className="text-xl font-bold text-white mb-2">Akses Dibatasi: Database Instansi</h3>
-                <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-                  Menu Database Instansi dan Parsing PDF hanya dapat dikelola oleh akun dengan hak akses <strong className="text-amber-300">Administrator</strong>.
-                </p>
-                <button
-                  onClick={() => setActiveTab('dashboard')}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  Kembali ke Dashboard
-                </button>
-              </div>
-            )
-          )}
+              {/* TAB 3: INSTANSI TERDAFTAR MANAGEMENT (ADMIN ONLY) */}
+              {activeTab === 'instansi' && (
+                currentUser.role === 'admin' ? (
+                  <InstansiManager
+                    instansiList={instansiList}
+                    onSelectForDashboard={(inst) => {
+                      setSelectedInstansiId(inst.id);
+                      setActiveTab('dashboard');
+                    }}
+                    onSelectForFormasi={(inst) => {
+                      setSelectedInstansiId(inst.id);
+                      setActiveTab('formasi');
+                    }}
+                    onOpenUploadModal={(id) => {
+                      const target = instansiList.find((i) => i.id === id) || null;
+                      setWizardTargetInstansi(target);
+                      setIsWizardOpen(true);
+                    }}
+                    onOpenAddModal={() => {
+                      setWizardTargetInstansi(null);
+                      setIsWizardOpen(true);
+                    }}
+                    onOpenEditModal={(inst) => {
+                      setWizardTargetInstansi(inst);
+                      setIsWizardOpen(true);
+                    }}
+                    onOpenJsonModal={(parsedData) => setJsonModalData(parsedData)}
+                    onDeleteInstansi={handleDeleteInstansi}
+                    onListUpdated={(newList) => setInstansiList(newList)}
+                  />
+                ) : (
+                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-lg mx-auto mt-12 shadow-2xl">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-4">
+                      <Lock className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2">Akses Dibatasi: Database Instansi</h3>
+                    <p className="text-sm text-slate-400 mb-6 leading-relaxed">
+                      Menu Database Instansi dan Parsing PDF hanya dapat dikelola oleh akun dengan hak akses <strong className="text-amber-300">Administrator</strong>.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab('dashboard')}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Kembali ke Dashboard
+                    </button>
+                  </div>
+                )
+              )}
 
-          {/* TAB 4: USER MANAGEMENT SECTION (ADMIN ONLY) */}
-          {activeTab === 'users' && (
-            currentUser.role === 'admin' ? (
-              <UserManagement
-                currentUser={currentUser}
-                onSwitchUser={(user) => setCurrentUser(user)}
-              />
-            ) : (
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-lg mx-auto mt-12 shadow-2xl">
-                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-4">
-                  <ShieldAlert className="w-8 h-8" />
-                </div>
-                <h3 className="text-xl font-bold text-white mb-2">Akses Dibatasi: User Management</h3>
-                <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-                  Pengelolaan akun pengguna login dan hak akses sistem hanya diperuntukkan bagi <strong className="text-amber-300">Administrator Utama</strong>.
-                </p>
-                <button
-                  onClick={() => setActiveTab('dashboard')}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  Kembali ke Dashboard
-                </button>
-              </div>
-            )
+              {/* TAB 4: USER MANAGEMENT SECTION (ADMIN ONLY) */}
+              {activeTab === 'users' && (
+                currentUser.role === 'admin' ? (
+                  <UserManagement
+                    currentUser={currentUser}
+                    onSwitchUser={(user) => setCurrentUser(user)}
+                  />
+                ) : (
+                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-lg mx-auto mt-12 shadow-2xl">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-4">
+                      <ShieldAlert className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2">Akses Dibatasi: User Management</h3>
+                    <p className="text-sm text-slate-400 mb-6 leading-relaxed">
+                      Pengelolaan akun pengguna login dan hak akses sistem hanya diperuntukkan bagi <strong className="text-amber-300">Administrator Utama</strong>.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab('dashboard')}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Kembali ke Dashboard
+                    </button>
+                  </div>
+                )
+              )}
+            </>
           )}
         </main>
 
@@ -438,17 +472,7 @@ export default function App() {
         </footer>
       </div>
 
-      {/* MODAL 1: PESERTA DETAIL MODAL */}
-      <PesertaDetailModal
-        key={`${pesertaModalFormasi?.instansiId || ''}-${pesertaModalFormasi?.block?.id || ''}`}
-        formasi={pesertaModalFormasi?.block || null}
-        instansiNama={pesertaModalFormasi?.instansiNama || ''}
-        instansiId={pesertaModalFormasi?.instansiId}
-        onClose={() => setPesertaModalFormasi(null)}
-        onUpdatePesertaList={handleUpdatePesertaFromModal}
-      />
-
-      {/* MODAL 2: 3-STEP FORMASI / INSTANSI WIZARD MODAL (1: Detail, 2: Upload & Split PDF, 3: Preview) */}
+      {/* MODAL: 3-STEP FORMASI / INSTANSI WIZARD MODAL (1: Detail, 2: Upload & Split PDF, 3: Preview) */}
       <FormasiWizardModal
         isOpen={isWizardOpen}
         initialItem={wizardTargetInstansi}

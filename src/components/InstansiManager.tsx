@@ -760,7 +760,7 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-scroll-container overflow-x-auto overscroll-contain" data-table-scroll="true">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-900 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">

@@ -1263,7 +1263,42 @@ export async function parsePdfWithCoordinates(
           }
         }
 
-        const finalFormasiBlocks = mergedOrder.map((id) => mergedMap.get(id)!);
+        const finalFormasiBlocks = mergedOrder.map((id) => {
+          const b = mergedMap.get(id)!;
+          if (!b.analytics) {
+            const list = Array.isArray(b.pesertaList) ? b.pesertaList : [];
+            const kuota = Number(b.header?.jumlahKuota) || Number(b.header?.kuotaJabatan) || 1;
+            const lulusList = list.filter((p) => p?.keterangan && String(p.keterangan).trim().toUpperCase().startsWith('P/L'));
+            const passedCandidates = lulusList.length > 0 ? lulusList : list;
+
+            const skdScores = passedCandidates.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
+            const allSkdScores = list.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
+            const skbScores = passedCandidates.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
+            const allSkbScores = list.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
+            const akhirScores = list.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
+            const lulusAkhirScores = lulusList.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
+
+            const minSkd = skdScores.length > 0 ? Math.min(...skdScores) : (allSkdScores.length > 0 ? Math.min(...allSkdScores) : null);
+            const maxSkd = allSkdScores.length > 0 ? Math.max(...allSkdScores) : null;
+            const minSkb = skbScores.length > 0 ? Math.min(...skbScores) : (allSkbScores.length > 0 ? Math.min(...allSkbScores) : null);
+            const maxSkb = allSkbScores.length > 0 ? Math.max(...allSkbScores) : null;
+            const highestNilaiAkhir = akhirScores.length > 0 ? Math.max(...akhirScores) : null;
+            const cutoffNilaiAkhir = lulusAkhirScores.length > 0 ? Math.min(...lulusAkhirScores) : (akhirScores.length > 0 ? Math.min(...akhirScores) : null);
+
+            b.analytics = {
+              totalPesertaSkb: list.length,
+              totalLulus: lulusList.length,
+              rasioKeketatan: kuota > 0 && list.length > 0 ? `1 : ${(list.length / kuota).toFixed(1)}` : (list.length > 0 ? `1 : ${list.length}` : '-'),
+              minSkd,
+              maxSkd,
+              minSkb,
+              maxSkb,
+              cutoffNilaiAkhir,
+              highestNilaiAkhir,
+            };
+          }
+          return b;
+        });
 
         const primaryFormasi = finalFormasiBlocks[0] || {
           header: currentHeader,
