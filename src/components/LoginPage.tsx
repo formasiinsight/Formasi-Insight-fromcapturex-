@@ -11,9 +11,11 @@ import {
   ArrowRight,
   User,
   CheckCircle2,
+  Home,
 } from 'lucide-react';
 import { AuthUser } from '../types';
 import { loginUser, ADMIN_EMAIL, ADMIN_DEFAULT_PASSWORD } from '../utils/authStorage';
+import { Breadcrumbs } from './Breadcrumbs';
 
 interface LoginPageProps {
   onLoginSuccess: (user: AuthUser) => void;
@@ -72,6 +74,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             Portal Analisis & Manajemen Formasi CPNS SSCASN BKN Indonesia
           </p>
         </div>
+
+        {/* Breadcrumbs for Login Page */}
+        <Breadcrumbs
+          items={[
+            { label: 'Portal SSCASN', icon: Home },
+            { label: 'Otentikasi', icon: Lock },
+            { label: 'Masuk Akun', icon: ShieldCheck, active: true },
+          ]}
+          className="mb-2 !justify-center"
+        />
 
         {/* Login Card */}
         <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/80 space-y-5">

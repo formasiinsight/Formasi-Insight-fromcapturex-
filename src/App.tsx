@@ -1,5 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, X, Lock, ShieldAlert, ArrowLeft } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  X,
+  Lock,
+  ShieldAlert,
+  ArrowLeft,
+  Home,
+  LayoutDashboard,
+  Briefcase,
+  Building2,
+  Database,
+  Users,
+  GraduationCap,
+  RotateCcw,
+  ShieldCheck,
+} from 'lucide-react';
 import { SidebarNavigation } from './components/SidebarNavigation';
 import { DashboardAnalytics } from './components/DashboardAnalytics';
 import { FormasiTableDetailed } from './components/FormasiTableDetailed';
@@ -11,6 +27,7 @@ import { InstansiFormModal } from './components/InstansiFormModal';
 import { FileUploadModal } from './components/FileUploadModal';
 import { JsonViewerModal } from './components/JsonViewerModal';
 import { FormasiWizardModal } from './components/FormasiWizardModal';
+import { Breadcrumbs, BreadcrumbItem } from './components/Breadcrumbs';
 
 import { InstansiItem, SSCASNFormasiBlock, SSCASNParsedResult, AuthUser } from './types';
 import {
@@ -290,6 +307,185 @@ export default function App() {
     });
   };
 
+  // Dynamic Breadcrumb Generator for main application tabs
+  const getTabBreadcrumbItems = (): BreadcrumbItem[] => {
+    const items: BreadcrumbItem[] = [
+      {
+        label: 'Portal SSCASN',
+        icon: Home,
+        onClick: () => handleTabChange('dashboard'),
+        title: 'Kembali ke Dashboard Utama',
+      },
+    ];
+
+    if (activeTab === 'dashboard') {
+      items.push({
+        label: 'Dashboard Analytics',
+        icon: LayoutDashboard,
+        active: selectedInstansiId === 'ALL' && !selectedJurusan && selectedJenjang === 'ALL',
+        onClick:
+          selectedInstansiId !== 'ALL' || selectedJurusan || selectedJenjang !== 'ALL'
+            ? () => {
+                setSelectedJenjang('ALL');
+                setSelectedJurusan('');
+              }
+            : undefined,
+        title: 'Ringkasan & Analisis Data Formasi',
+      });
+
+      if (selectedInstansi && selectedInstansiId !== 'ALL') {
+        items.push({
+          label: selectedInstansi.nama,
+          icon: Building2,
+          active: !selectedJurusan && selectedJenjang === 'ALL',
+          badge: selectedInstansi.tahun || '2024',
+          title: `Instansi: ${selectedInstansi.nama}`,
+        });
+      }
+
+      if (selectedJenjang && selectedJenjang !== 'ALL') {
+        items.push({
+          label: `Jenjang: ${selectedJenjang}`,
+          icon: GraduationCap,
+          onClick: () => setSelectedJenjang('ALL'),
+          title: 'Klik untuk reset jenjang ke Semua',
+        });
+      }
+
+      if (selectedJurusan) {
+        items.push({
+          label: `Jurusan: ${selectedJurusan}`,
+          icon: GraduationCap,
+          active: true,
+          badge: 'Filter Aktif',
+          onClick: () => setSelectedJurusan(''),
+          title: 'Klik untuk hapus filter jurusan',
+        });
+      }
+    } else if (activeTab === 'formasi') {
+      items.push({
+        label: 'Daftar Formasi CPNS',
+        icon: Briefcase,
+        active: selectedInstansiId === 'ALL' && !selectedJurusan && selectedJenjang === 'ALL',
+        onClick: () => {
+          setSelectedInstansiId('ALL');
+          setSelectedJenjang('ALL');
+          setSelectedJurusan('');
+        },
+        title: 'Lihat Semua Formasi SSCASN',
+      });
+
+      if (selectedInstansiId !== 'ALL') {
+        items.push({
+          label: selectedInstansi?.nama || selectedInstansiId,
+          icon: Building2,
+          active: !selectedJurusan && selectedJenjang === 'ALL',
+          onClick: () => setSelectedInstansiId('ALL'),
+          title: 'Klik untuk reset ke semua instansi',
+        });
+      }
+
+      if (selectedJenjang && selectedJenjang !== 'ALL') {
+        items.push({
+          label: `Jenjang: ${selectedJenjang}`,
+          icon: GraduationCap,
+          onClick: () => setSelectedJenjang('ALL'),
+          title: 'Klik untuk reset jenjang',
+        });
+      }
+
+      if (selectedJurusan) {
+        items.push({
+          label: `Jurusan: ${selectedJurusan}`,
+          icon: GraduationCap,
+          active: true,
+          badge: 'Filter Aktif',
+          onClick: () => setSelectedJurusan(''),
+          title: 'Klik untuk hapus filter jurusan',
+        });
+      }
+    } else if (activeTab === 'instansi') {
+      items.push({
+        label: 'Master Data',
+        icon: Database,
+        onClick: () => handleTabChange('instansi'),
+      });
+      items.push({
+        label: 'Database Instansi & Parsing PDF',
+        icon: Building2,
+        active: true,
+        badge: `${instansiList.length} Instansi`,
+        title: 'Kelola data instansi & unggah dokumen SSCASN',
+      });
+    } else if (activeTab === 'users') {
+      items.push({
+        label: 'Pengaturan Sistem',
+        icon: ShieldCheck,
+      });
+      items.push({
+        label: 'User Management & Hak Akses',
+        icon: Users,
+        active: true,
+        badge: currentUser?.role === 'admin' ? 'Administrator' : 'Pengguna',
+      });
+    }
+
+    return items;
+  };
+
+  const getTabBreadcrumbRightContent = () => {
+    if (activeTab === 'dashboard') {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-semibold text-[11px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Live SSCASN Database</span>
+          </span>
+        </div>
+      );
+    }
+    if (activeTab === 'formasi') {
+      const hasFilter = selectedInstansiId !== 'ALL' || selectedJenjang !== 'ALL' || !!selectedJurusan;
+      if (hasFilter) {
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedInstansiId('ALL');
+              setSelectedJenjang('ALL');
+              setSelectedJurusan('');
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/50 border border-indigo-500/30 transition-all cursor-pointer"
+            title="Kembalikan semua filter formasi"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>Reset Filter</span>
+          </button>
+        );
+      }
+      return (
+        <span className="text-slate-500 text-[11px]">
+          {instansiList.length} Instansi Terpantau
+        </span>
+      );
+    }
+    if (activeTab === 'instansi') {
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            setWizardTargetInstansi(null);
+            setIsWizardOpen(true);
+          }}
+          className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer"
+        >
+          <span>+ Tambah Instansi</span>
+        </button>
+      );
+    }
+    return null;
+  };
+
   if (!currentUser) {
     return <LoginPage onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
@@ -332,6 +528,12 @@ export default function App() {
             />
           ) : (
             <>
+              {/* GLOBAL BREADCRUMBS FOR ACTIVE PAGE */}
+              <Breadcrumbs
+                items={getTabBreadcrumbItems()}
+                rightContent={getTabBreadcrumbRightContent()}
+              />
+
               {/* TAB 1: DASHBOARD ANALYTICS */}
               {activeTab === 'dashboard' && (
                 <DashboardAnalytics

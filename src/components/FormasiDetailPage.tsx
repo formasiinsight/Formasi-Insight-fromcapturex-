@@ -28,6 +28,7 @@ import { calculateVerification } from '../utils/sampleData';
 import { getFormasiKuota } from '../utils/kuotaUtils';
 import { cleanPendidikanString } from '../utils/jenisFormasiUtils';
 import { fetchPesertaByFormasiAsync } from '../utils/instansiStorage';
+import { Breadcrumbs } from './Breadcrumbs';
 
 export interface FormasiDetailPageProps {
   formasi: SSCASNFormasiBlock | null;
@@ -214,63 +215,67 @@ export const FormasiDetailPage: React.FC<FormasiDetailPageProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* 1. BREADCRUMBS NAVIGATION BAR */}
-      <nav
-        aria-label="Breadcrumb"
-        className="flex items-center justify-between flex-wrap gap-3 bg-slate-900/90 border border-slate-800 rounded-2xl px-4 py-3 backdrop-blur-md shadow-sm"
-      >
-        <div className="flex items-center gap-2 text-xs text-slate-400 flex-wrap min-w-0">
-          {/* Dashboard link */}
-          <button
-            onClick={handleBreadcrumbDashboard}
-            className="inline-flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer text-slate-400 font-medium group"
-          >
-            <Home className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition-colors" />
-            <span>Dashboard</span>
-          </button>
+      <Breadcrumbs
+        className="!mb-0"
+        items={[
+          {
+            label: 'Portal SSCASN',
+            icon: Home,
+            onClick: handleBreadcrumbDashboard,
+            title: 'Kembali ke Dashboard Utama',
+          },
+          {
+            label: fromTab === 'dashboard' ? 'Dashboard Analytics' : 'Daftar Formasi CPNS',
+            icon: fromTab === 'dashboard' ? Home : Briefcase,
+            onClick: fromTab === 'dashboard' ? handleBreadcrumbDashboard : handleBreadcrumbFormasi,
+            title: fromTab === 'dashboard' ? 'Kembali ke Dashboard' : 'Kembali ke Daftar Formasi',
+          },
+          {
+            label: instansiNama || 'Instansi',
+            icon: Building2,
+            onClick: handleBreadcrumbInstansi,
+            title: `Filter berdasarkan ${instansiNama}`,
+          },
+          {
+            label: header.jabatanFormasi || 'Detail Formasi',
+            icon: Briefcase,
+            active: true,
+            title: header.jabatanFormasi,
+          },
+        ]}
+        rightContent={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopySummary}
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+              title="Salin ringkasan data formasi"
+            >
+              {hasCopied ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400">Tersalin</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Salin Info</span>
+                </>
+              )}
+            </button>
 
-          <ChevronRight className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-
-          {/* Formasi link */}
-          <button
-            onClick={handleBreadcrumbFormasi}
-            className="inline-flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer text-slate-400 font-medium group"
-          >
-            <Briefcase className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition-colors" />
-            <span>Daftar Formasi</span>
-          </button>
-
-          <ChevronRight className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-
-          {/* Instansi link */}
-          <button
-            onClick={handleBreadcrumbInstansi}
-            className="inline-flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer text-slate-400 font-medium group truncate max-w-[200px]"
-            title={instansiNama}
-          >
-            <Building2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition-colors shrink-0" />
-            <span className="truncate">{instansiNama}</span>
-          </button>
-
-          <ChevronRight className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-
-          {/* Active current formasi */}
-          <span
-            className="font-bold text-indigo-300 truncate max-w-[260px] sm:max-w-[340px]"
-            title={header.jabatanFormasi}
-          >
-            {header.jabatanFormasi || 'Detail Formasi'}
-          </span>
-        </div>
-
-        {/* Action Button: Kembali */}
-        <button
-          onClick={onBack}
-          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold border border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
-        >
-          <ArrowLeft className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Kembali</span>
-        </button>
-      </nav>
+            <button
+              onClick={onBack}
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+              title="Kembali ke halaman sebelumnya"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Kembali</span>
+            </button>
+          </div>
+        }
+      />
 
       {/* 2. FORMASI HERO HEADER CARD */}
       <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
