@@ -18,10 +18,23 @@ table {
 
 /*
  * Khusus Mobile (layar <= 768px):
- * Matikan seluruh column sticky / fixed di semua tabel agar scrolling 100% natural,
- * bebas overlap/glitch, dan tidak memakan ruang pandang layar smartphone.
+ * 1. Samakan interaksi scroll mobile pada Analisis Instansi & Katalog Formasi dengan Database Instansi:
+ *    - Tabel di mobile hanya scroll horizontal murni (overflow-x: auto, overflow-y: visible)
+ *    - Hilangkan batasan max-height inner scroll container agar scrolling vertikal 100% menggunakan native page scroll
+ *    - Menghilangkan kemungkinan scroll diagonal pada layar sentuh
+ *    - Mencegah jebakan scroll (scroll trap): saat berada di posisi paling atas, swipe ke bawah langsung
+ *      menggerakkan halaman tanpa harus menyentuh di luar area tabel.
+ * 2. Matikan seluruh column sticky / fixed di semua tabel agar bebas overlap/glitch dan natural.
  */
 @media screen and (max-width: 768px) {
+  .table-scroll-container:not(.modal-scroll),
+  [data-table-scroll="true"]:not(.modal-scroll) {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    max-height: none !important;
+    min-height: 0 !important;
+  }
+
   .table-scroll-container th,
   .table-scroll-container td,
   [data-table-scroll="true"] th,
@@ -54,6 +67,23 @@ table {
     font-size: 16px !important;
     touch-action: manipulation;
   }
+}
+
+/*
+ * Penyelarasan Box-Sizing & Height Dropdown Field dan Text Field:
+ * Memastikan semua select, input teks, textarea, dan dropdown button terisi seragam
+ */
+select,
+input[type="text"],
+input[type="search"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="url"],
+input:not([type]),
+textarea {
+  box-sizing: border-box;
 }
 
 input,

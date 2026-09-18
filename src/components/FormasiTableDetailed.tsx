@@ -106,7 +106,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           setIsOpen(!isOpen);
           setSearchTerm('');
         }}
-        className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium flex items-center justify-between transition-colors text-left cursor-pointer focus:outline-none focus:border-indigo-500"
+        className="w-full h-10 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-lg px-2.5 text-xs text-white font-medium flex items-center justify-between transition-colors text-left cursor-pointer focus:outline-none focus:border-indigo-500"
       >
         <span className="truncate pr-1 text-slate-200">{selectedOption?.label || placeholder}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -648,7 +648,7 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
 
             <button
               onClick={resetFilters}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 transition-all cursor-pointer flex items-center gap-1.5"
+              className="h-10 px-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 transition-all cursor-pointer flex items-center gap-1.5"
             >
               <RotateCcw className="w-3 h-3" />
               <span>Reset</span>
@@ -674,7 +674,7 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
                   setCurrentPage(1);
                 }}
                 placeholder="Ketik jabatan (misal: Guru, Arsiparis)..."
-                className="w-full pl-8 pr-7 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
+                className="w-full h-10 pl-8 pr-7 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
               />
               {selectedJabatan && (
                 <button
@@ -725,7 +725,7 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
                     setCurrentPage(1);
                   }}
                   placeholder="Ketik Jurusan / Prodi..."
-                  className="w-full pl-8 pr-7 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
+                  className="w-full h-10 pl-8 pr-7 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
                 />
                 {selectedPendidikan && selectedPendidikan !== 'ALL' && (
                   <button
@@ -761,7 +761,7 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
                   setCurrentPage(1);
                 }}
                 placeholder="Ketik lokasi (misal: Surabaya, Malang)..."
-                className="w-full pl-8 pr-7 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
+                className="w-full h-10 pl-8 pr-7 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
               />
               {selectedLokasi && selectedLokasi !== 'ALL' && (
                 <button
@@ -867,7 +867,7 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
 
         {/* Scrollable Table View */}
         <div
-          className="table-scroll-container overflow-auto max-h-[calc(100vh-220px)] min-h-[350px] relative overscroll-x-contain overscroll-y-auto"
+          className="table-scroll-container overflow-x-auto md:overflow-auto max-md:max-h-none md:max-h-[calc(100vh-220px)] min-h-0 md:min-h-[350px] relative overscroll-x-contain overscroll-y-auto"
           data-table-scroll="true"
         >
           <table className="w-full text-left border-separate border-spacing-0 text-[11px]">

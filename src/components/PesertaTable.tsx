@@ -112,13 +112,13 @@ export const PesertaTable: React.FC<PesertaTableProps> = ({ pesertaList: rawPese
       {/* Toolbar: Search and Filter */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
         <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
             placeholder="Cari Nama / No Peserta..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+            className="w-full h-10 pl-9 pr-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
           />
         </div>
 
@@ -127,7 +127,7 @@ export const PesertaTable: React.FC<PesertaTableProps> = ({ pesertaList: rawPese
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-slate-200 px-3 py-2 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            className="h-10 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-slate-200 px-3 focus:outline-none focus:border-indigo-500 cursor-pointer"
           >
             <option value="ALL">Semua Keterangan</option>
             <option value="PL">Hanya Lulus (P/L)</option>
@@ -138,7 +138,7 @@ export const PesertaTable: React.FC<PesertaTableProps> = ({ pesertaList: rawPese
 
       {/* Responsive Data Table */}
       <div
-        className="table-scroll-container overflow-auto max-h-[calc(80vh-180px)] min-h-[350px] rounded-xl border border-slate-200 dark:border-slate-800 relative overscroll-x-contain overscroll-y-auto"
+        className="table-scroll-container overflow-x-auto md:overflow-auto max-md:max-h-none md:max-h-[calc(80vh-180px)] min-h-0 md:min-h-[350px] rounded-xl border border-slate-200 dark:border-slate-800 relative overscroll-x-contain overscroll-y-auto"
         data-table-scroll="true"
       >
         <table className="w-full text-xs text-left">

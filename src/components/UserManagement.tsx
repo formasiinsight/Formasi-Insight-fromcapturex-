@@ -333,13 +333,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         <div className="flex flex-col md:flex-row items-center justify-between gap-3">
           {/* Search Input */}
           <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder="Cari nama, email, atau instansi..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
             />
           </div>
 
@@ -349,7 +349,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value as any)}
-              className="px-3.5 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 flex-1 md:flex-initial"
+              className="h-10 px-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 flex-1 md:flex-initial cursor-pointer"
             >
               <option value="ALL">Semua Peran (Role)</option>
               <option value="admin">Administrator</option>
@@ -360,7 +360,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="px-3.5 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 flex-1 md:flex-initial"
+              className="h-10 px-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 flex-1 md:flex-initial cursor-pointer"
             >
               <option value="ALL">Semua Status</option>
               <option value="active">Aktif</option>

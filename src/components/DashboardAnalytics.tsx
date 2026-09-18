@@ -376,7 +376,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
                 <select
                   value={inputJenjang}
                   onChange={(e) => setInputJenjang(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white font-semibold rounded-xl px-3 py-2.5 text-xs cursor-pointer focus:outline-none"
+                  className="w-full h-11 bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white font-semibold rounded-xl px-3 text-xs cursor-pointer focus:outline-none"
                 >
                   <option value="ALL">🌐 Semua Jenjang</option>
                   <option value="S-1">🎓 S-1 / Sarjana</option>
@@ -397,7 +397,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
                   value={inputJurusan}
                   onChange={(e) => setInputJurusan(e.target.value)}
                   placeholder="Ketik nama jurusan (misal: Perikanan, Hukum, Informatika)..."
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl pl-3.5 pr-8 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
+                  className="w-full h-11 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl pl-3.5 pr-8 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
                 />
                 {inputJurusan && (
                   <button
@@ -417,7 +417,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
           <div className="shrink-0">
             <button
               type="submit"
-              className="w-full md:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer border border-indigo-400/30"
+              className="w-full md:w-auto h-11 px-5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer border border-indigo-400/30"
             >
               <Search className="w-3.5 h-3.5" />
               <span>Terapkan Filter</span>
@@ -556,13 +556,13 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
 
               {/* Search Input by Instansi */}
               <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={instansiSearchQuery}
                   onChange={(e) => setInstansiSearchQuery(e.target.value)}
                   placeholder="Cari nama / kode instansi..."
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl pl-8 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all font-medium"
+                  className="w-full h-10 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl pl-8 pr-7 text-xs text-white placeholder-slate-500 focus:outline-none transition-all font-medium"
                 />
                 {instansiSearchQuery && (
                   <button
@@ -603,7 +603,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
             {/* INSTANSI COMPARISON CARDS & TABLE */}
             <div className="border border-slate-800 rounded-2xl bg-slate-950/40 overflow-hidden shadow-inner">
               <div
-                className="table-scroll-container overflow-auto max-h-[calc(100vh-180px)] min-h-[400px] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/50 overscroll-x-contain overscroll-y-auto"
+                className="table-scroll-container overflow-x-auto md:overflow-auto max-md:max-h-none md:max-h-[calc(100vh-180px)] min-h-0 md:min-h-[400px] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/50 overscroll-x-contain overscroll-y-auto"
                 data-table-scroll="true"
               >
                 <table className="w-full text-left border-separate border-spacing-0 text-xs">

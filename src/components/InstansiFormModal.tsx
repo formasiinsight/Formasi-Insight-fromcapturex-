@@ -143,7 +143,7 @@ export const InstansiFormModal: React.FC<InstansiFormModalProps> = ({
               value={nama}
               onChange={(e) => setNama(e.target.value)}
               placeholder="Contoh: Kementerian Kesehatan RI / Pemkab Malang"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl px-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
             />
           </div>
 
@@ -158,7 +158,7 @@ export const InstansiFormModal: React.FC<InstansiFormModalProps> = ({
                 value={kode}
                 onChange={(e) => setKode(e.target.value)}
                 placeholder="Misal: 4003 / 6512"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl px-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
               />
             </div>
 
@@ -169,7 +169,7 @@ export const InstansiFormModal: React.FC<InstansiFormModalProps> = ({
               <select
                 value={kategori}
                 onChange={(e) => setKategori(e.target.value as InstansiKategori)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl px-3.5 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
               >
                 <option value="kementerian">Kementerian</option>
                 <option value="lembaga">Lembaga / LPNK</option>
@@ -187,7 +187,7 @@ export const InstansiFormModal: React.FC<InstansiFormModalProps> = ({
                 value={provinsi}
                 onChange={(e) => setProvinsi(e.target.value)}
                 placeholder="Misal: Jawa Timur / DKI Jakarta"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl px-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               />
             </div>
 
@@ -198,7 +198,7 @@ export const InstansiFormModal: React.FC<InstansiFormModalProps> = ({
                 value={tahun}
                 onChange={(e) => setTahun(e.target.value)}
                 placeholder="2024"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl px-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
               />
             </div>
           </div>

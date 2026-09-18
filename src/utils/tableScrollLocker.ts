@@ -193,11 +193,78 @@ function handleTableWheel(e: WheelEvent) {
   }
 }
 
+interface TouchSession {
+  startX: number;
+  startY: number;
+  lastY: number;
+  axis: 'x' | 'y' | null;
+  container: HTMLElement | null;
+}
+
+let activeTouch: TouchSession | null = null;
+
+function handleTableTouchStart(e: TouchEvent) {
+  if (e.touches.length !== 1) {
+    activeTouch = null;
+    return;
+  }
+  const container = findTableScrollContainer(e.target);
+  if (!container) return;
+  activeTouch = {
+    startX: e.touches[0].clientX,
+    startY: e.touches[0].clientY,
+    lastY: e.touches[0].clientY,
+    axis: null,
+    container,
+  };
+}
+
+function handleTableTouchMove(e: TouchEvent) {
+  if (!activeTouch || !activeTouch.container) return;
+  const container = activeTouch.container;
+  const touch = e.touches[0];
+  const curX = touch.clientX;
+  const curY = touch.clientY;
+  const diffX = curX - activeTouch.startX;
+  const diffY = curY - activeTouch.startY;
+  const stepY = curY - activeTouch.lastY;
+  activeTouch.lastY = curY;
+
+  const canScrollX = container.scrollWidth > container.clientWidth;
+  const canScrollY = container.scrollHeight > container.clientHeight;
+
+  // If container only scrolls horizontally, native browser handles horizontal table scroll
+  // and vertical window scroll with zero interference
+  if (canScrollX && !canScrollY) return;
+
+  if (!activeTouch.axis) {
+    if (Math.abs(diffX) > 6 || Math.abs(diffY) > 6) {
+      activeTouch.axis = Math.abs(diffX) > Math.abs(diffY) ? 'x' : 'y';
+    }
+  }
+
+  // If locked to vertical gesture:
+  if (activeTouch.axis === 'y') {
+    const isAtTop = container.scrollTop <= 0;
+    const isAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+
+    // If swiping down while at top (stepY > 0) or swiping up while at bottom (stepY < 0):
+    // Cascade scroll to window so page scrolls and user is not trapped!
+    if ((stepY > 0 && isAtTop) || (stepY < 0 && isAtBottom)) {
+      window.scrollBy({ top: -stepY, behavior: 'instant' });
+    }
+  }
+}
+
+function handleTableTouchEnd() {
+  activeTouch = null;
+}
+
 let isInitialized = false;
 
 /**
- * Initializes global event listeners to lock table components to 1D scroll axis on desktop trackpad.
- * On mobile touch screens, native hardware momentum scrolling is preserved.
+ * Initializes global event listeners to lock table components to 1D scroll axis.
+ * Supports trackpad/mouse wheel on desktop and touch gestures on mobile devices.
  */
 export function initTableScrollLocker() {
   if (isInitialized || typeof window === 'undefined') return;
@@ -205,4 +272,10 @@ export function initTableScrollLocker() {
 
   // Trackpad / Wheel listener (Desktop)
   window.addEventListener('wheel', handleTableWheel, { passive: false, capture: true });
+
+  // Touch listeners (Mobile & Touch screens)
+  window.addEventListener('touchstart', handleTableTouchStart, { passive: true, capture: true });
+  window.addEventListener('touchmove', handleTableTouchMove, { passive: true, capture: true });
+  window.addEventListener('touchend', handleTableTouchEnd, { passive: true, capture: true });
+  window.addEventListener('touchcancel', handleTableTouchEnd, { passive: true, capture: true });
 }

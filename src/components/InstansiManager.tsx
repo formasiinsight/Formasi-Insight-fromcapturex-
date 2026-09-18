@@ -540,13 +540,13 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* SEARCH INPUT */}
           <div className="relative flex-1 max-w-md">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari nama instansi atau kode..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
+              className="w-full h-10 pl-9 pr-4 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
             />
           </div>
 
@@ -554,7 +554,7 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
           <div className="flex items-center gap-2">
             <button
               onClick={onOpenAddModal}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 shrink-0"
+              className="h-10 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Tambah Instansi</span>
@@ -564,7 +564,7 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
             <div className="relative">
               <button
                 onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                className={`px-3 py-2 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`h-10 px-3 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                   isMoreMenuOpen ? 'bg-slate-800 text-white border-slate-700' : ''
                 }`}
                 title="Aksi Lainnya"
