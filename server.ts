@@ -990,6 +990,228 @@ async function startServer() {
   });
 
   // =================================================================
+  // 50% QUOTA SAFEGUARD & USER AI ASSISTANT ENDPOINTS
+  // =================================================================
+  // Alokasi 50% kuota harian untuk publik/user, sisa 50% dicadangkan khusus untuk Admin
+  const MAX_DAILY_USER_AI_QUOTA = Number(process.env.USER_AI_DAILY_QUOTA) || 750;
+  let currentQuotaDate = new Date().toISOString().slice(0, 10);
+  let currentDailyUserAiCount = 0;
+  const userAiPerIpTracker = new Map<string, { count: number; date: string }>();
+
+  function checkAndIncrementUserAiQuota(clientIp: string): {
+    allowed: boolean;
+    remaining: number;
+    limit: number;
+    used: number;
+    error?: string;
+  } {
+    const today = new Date().toISOString().slice(0, 10);
+    if (today !== currentQuotaDate) {
+      currentQuotaDate = today;
+      currentDailyUserAiCount = 0;
+      userAiPerIpTracker.clear();
+    }
+
+    if (currentDailyUserAiCount >= MAX_DAILY_USER_AI_QUOTA) {
+      return {
+        allowed: false,
+        remaining: 0,
+        limit: MAX_DAILY_USER_AI_QUOTA,
+        used: currentDailyUserAiCount,
+        error: `Batas kuota harian analisis AI publik (alokasi 50% admin) telah tercapai (${currentDailyUserAiCount}/${MAX_DAILY_USER_AI_QUOTA} pertanyaan). Kuota akan direset otomatis besok pukul 00.00 WIB. Anda tetap dapat meneliti data secara mandiri menggunakan filter tabel.`,
+      };
+    }
+
+    // Per-IP spam limiter (maksimal 30 pertanyaan per IP per hari agar kuota 50% tidak dihabiskan 1 user)
+    const ipRecord = userAiPerIpTracker.get(clientIp);
+    if (ipRecord && ipRecord.date === today && ipRecord.count >= 30) {
+      return {
+        allowed: false,
+        remaining: Math.max(0, MAX_DAILY_USER_AI_QUOTA - currentDailyUserAiCount),
+        limit: MAX_DAILY_USER_AI_QUOTA,
+        used: currentDailyUserAiCount,
+        error: 'Anda telah mencapai batas 30 pertanyaan AI hari ini untuk perangkat ini. Pembatasan ini diterapkan agar kuota 50% dinikmati merata oleh seluruh pengguna.',
+      };
+    }
+
+    currentDailyUserAiCount += 1;
+    const nextIpCount = (ipRecord && ipRecord.date === today) ? ipRecord.count + 1 : 1;
+    userAiPerIpTracker.set(clientIp, { count: nextIpCount, date: today });
+
+    return {
+      allowed: true,
+      remaining: Math.max(0, MAX_DAILY_USER_AI_QUOTA - currentDailyUserAiCount),
+      limit: MAX_DAILY_USER_AI_QUOTA,
+      used: currentDailyUserAiCount,
+    };
+  }
+
+  // GET /api/ai/quota-status - Informasi sisa kuota 50% untuk publik
+  app.get('/api/ai/quota-status', (req, res) => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (today !== currentQuotaDate) {
+      currentQuotaDate = today;
+      currentDailyUserAiCount = 0;
+      userAiPerIpTracker.clear();
+    }
+    const remaining = Math.max(0, MAX_DAILY_USER_AI_QUOTA - currentDailyUserAiCount);
+    res.json({
+      success: true,
+      limit: MAX_DAILY_USER_AI_QUOTA,
+      used: currentDailyUserAiCount,
+      remaining,
+      percentUsed: Math.round((currentDailyUserAiCount / MAX_DAILY_USER_AI_QUOTA) * 100),
+      allocation: '50% Kuota Admin',
+      date: currentQuotaDate,
+    });
+  });
+
+  // POST /api/ai/analyze-formasi - Asisten Analisis Formasi berbasis Context Grounding
+  app.post('/api/ai/analyze-formasi', async (req, res) => {
+    try {
+      const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+      const quotaCheck = checkAndIncrementUserAiQuota(clientIp);
+
+      if (!quotaCheck.allowed) {
+        return res.status(429).json({
+          success: false,
+          error: quotaCheck.error,
+          quota: {
+            limit: quotaCheck.limit,
+            used: quotaCheck.used,
+            remaining: quotaCheck.remaining,
+          },
+        });
+      }
+
+      const { question, instansiName, jurusan, jenjang, formasiList } = req.body;
+
+      if (!question || typeof question !== 'string' || question.trim().length === 0) {
+        return res.status(400).json({ success: false, error: 'Pertanyaan tidak boleh kosong.' });
+      }
+
+      if (!Array.isArray(formasiList) || formasiList.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Tidak ada data formasi yang sedang aktif di layar untuk dianalisis.',
+        });
+      }
+
+      // Format data formasi ramping (hanya kolom penting untuk menghemat token dan menjaga kecepatan)
+      // Dibatasi 20 formasi teratas dari hasil filter aktif agar respon ultra cepat dan hemat token
+      const targetList = formasiList.slice(0, 20);
+      const formattedFormasiRows = targetList.map((f: any, idx: number) => {
+        const parts = [
+          `[#${idx + 1}] Jabatan: ${f.jabatan || '-'}`,
+          `Unit Kerja / Lokasi: ${f.lokasi || '-'}`,
+          `Pendidikan: ${f.pendidikan || '-'}`,
+          `Jenis Formasi: ${f.jenisFormasi || 'UMUM'}`,
+          `Kuota: ${f.kuota || 1}`,
+          `Peserta SKB / Pelamar: ${f.pelamarSkb || f.totalPesertaSkb || 0}`,
+          `Rasio: ${f.rasio || '-'}`,
+        ];
+        if (f.cutoffNilaiAkhir != null) {
+          parts.push(`Passing Grade / Cutoff Nilai Akhir: ${f.cutoffNilaiAkhir}`);
+        }
+        if (f.minSkd != null && f.maxSkd != null) {
+          parts.push(`Rentang SKD: ${f.minSkd} - ${f.maxSkd}`);
+        }
+        return parts.join(' | ');
+      }).join('\n');
+
+      const systemInstruction = `Kamu adalah Konsultan & Asisten Analisis Formasi CASN/PPPK "Formasi Insight".
+Tugasmu adalah membantu calon peserta menganalisis formasi secara objektif, strategis, dan ramah, HANYA berdasarkan data tabel yang sedang aktif dilihat pengguna di layarnya.
+
+ATURAN WAJIB (STRICT CONTEXT GROUNDING):
+1. HANYA gunakan dan analisis data formasi yang tercantum pada [DATA FORMASI AKTIF PADA TABEL] di bawah ini.
+2. DILARANG KERAS mengarang, berhalusinasi, atau merekomendasikan instansi/jabatan/lokasi di luar data yang dilampirkan.
+3. Jika pengguna menanyakan lokasi/daerah yang dekat dengan rumah mereka:
+   - Periksa bagian "Unit Kerja / Lokasi" pada daftar formasi terlampir.
+   - Cocokkan secara cerdas dengan nama daerah/kecamatan/kota yang disebutkan pengguna.
+   - Jika ada yang cocok/dekat, berikan rekomendasi dan jelaskan alasan kedekatannya.
+   - Jika tidak ada lokasi yang cocok atau dekat di dalam data terlampir, katakan secara jujur dan sebutkan opsi lokasi terdekat yang tersedia pada daftar.
+4. Jika pengguna menanyakan peluang lolos / formasi peluang masuk terbesar:
+   - Analisis rasio keketatan (kuota vs jumlah pelamar). Rasio 1 : 1 atau 1 : 2 jauh lebih berpeluang daripada 1 : 10 atau 1 : 20.
+   - Tinjau juga nilai cutoff atau nilai SKD jika tercantum.
+   - Berikan rekomendasi 1-3 formasi terbaik dengan peluang masuk tertinggi.
+5. Format jawaban:
+   - Gunakan Markdown yang rapi (bold untuk nama jabatan & lokasi, bullet points, emoji penanda seperti 🎯, 📍, ⚖️, 💡).
+   - Buat jawaban ringkas, terstruktur, langsung menjawab pertanyaan pengguna, dan beri tips strategis di akhir.`;
+
+      const userPrompt = `[KONTEKS FILTER AKTIF PENGGUNA]
+- Instansi: ${instansiName || 'Semua Instansi'}
+- Jurusan yang difilter: ${jurusan || 'Semua Jurusan'}
+- Jenjang Pendidikan: ${jenjang || 'Semua Jenjang'}
+- Total Formasi Ditampilkan: ${targetList.length} formasi (dari total ${formasiList.length} hasil filter)
+
+[DATA FORMASI AKTIF PADA TABEL]:
+${formattedFormasiRows}
+
+[PERTANYAAN PENGGUNA]:
+"${question.trim()}"
+
+Tolong berikan analisis dan jawaban terbaik berdasarkan data formasi aktif di atas.`;
+
+      const ai = getGeminiClient();
+      
+      let timerId: NodeJS.Timeout | undefined;
+      const timeoutPromise = new Promise((_, reject) => {
+        timerId = setTimeout(() => reject(new Error('Koneksi ke server AI Google melebihi batas waktu (timeout 30 detik). Silakan coba lagi.')), 30000);
+      });
+
+      const geminiCall = ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: userPrompt,
+        config: {
+          systemInstruction,
+          temperature: 0.2, // Rendah untuk menghindari halusinasi
+          maxOutputTokens: 800, // Jawaban padat, terstruktur, dan cepat selesai
+        },
+      });
+
+      let geminiResult: any;
+      try {
+        geminiResult = await Promise.race([geminiCall, timeoutPromise]);
+      } finally {
+        if (timerId) clearTimeout(timerId);
+      }
+
+      const answer = geminiResult.text || 'Maaf, AI tidak dapat menghasilkan jawaban saat ini.';
+
+      if (!res.headersSent) {
+        res.json({
+          success: true,
+          answer,
+          quota: {
+            limit: quotaCheck.limit,
+            used: quotaCheck.used,
+            remaining: quotaCheck.remaining,
+          },
+        });
+      }
+    } catch (err: any) {
+      if (res.headersSent) return;
+      console.error('[AI Analyze Formasi Error]:', err);
+      // Kembalikan kuota jika pemrosesan AI gagal agar user tidak rugi
+      currentDailyUserAiCount = Math.max(0, currentDailyUserAiCount - 1);
+      
+      let clientErrorMsg = 'Terjadi kesalahan saat memproses analisis AI.';
+      if (err?.message?.includes('503') || err?.message?.includes('high demand') || err?.message?.includes('UNAVAILABLE')) {
+        clientErrorMsg = 'Layanan Google Gemini sedang mengalami lonjakan trafik sesaat. Kuota Anda tidak terpotong. Silakan klik kirim ulang beberapa detik lagi.';
+      } else if (err?.message?.includes('timeout') || err?.message?.includes('HeadersTimeoutError') || err?.message?.includes('fetch failed')) {
+        clientErrorMsg = 'Waktu respon server AI melebihi batas. Kuota Anda tidak terpotong. Silakan coba ajukan pertanyaan kembali.';
+      } else if (err?.message) {
+        clientErrorMsg = err.message;
+      }
+
+      res.status(500).json({
+        success: false,
+        error: clientErrorMsg,
+      });
+    }
+  });
+
+  // =================================================================
   // CLOUD DATABASE API ENDPOINTS (v2.6)
   // =================================================================
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Building2, Save } from 'lucide-react';
 import { InstansiItem, InstansiKategori } from '../types';
+import { DAFTAR_PROVINSI_INDONESIA } from '../utils/instansiClassifier';
 
 interface InstansiFormModalProps {
   isOpen: boolean;
@@ -89,12 +90,17 @@ export const InstansiFormModal: React.FC<InstansiFormModalProps> = ({
       }
     }
 
+    if (kategori === 'pemkab_pemkot' && !provinsi.trim()) {
+      setErrorMessage('Provinsi wajib dipilih dari dropdown untuk instansi Pemerintah Kabupaten/Kota (Pemkab/Pemkot).');
+      return;
+    }
+
     setErrorMessage('');
     onSave({
       nama: trimmedNama,
       kode: trimmedKode,
       kategori,
-      provinsi: provinsi.trim() || undefined,
+      provinsi: (kategori === 'pemkab_pemkot' || kategori === 'pemprov') ? (provinsi.trim() || undefined) : undefined,
       tahun: tahun.trim() || '2024',
       notes: notes.trim() || undefined,
     });
@@ -168,7 +174,14 @@ export const InstansiFormModal: React.FC<InstansiFormModalProps> = ({
               </label>
               <select
                 value={kategori}
-                onChange={(e) => setKategori(e.target.value as InstansiKategori)}
+                onChange={(e) => {
+                  const newKategori = e.target.value as InstansiKategori;
+                  setKategori(newKategori);
+                  if (newKategori !== 'pemkab_pemkot' && newKategori !== 'pemprov') {
+                    setProvinsi('');
+                  }
+                  if (errorMessage) setErrorMessage('');
+                }}
                 className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl px-3.5 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
               >
                 <option value="kementerian">Kementerian</option>
@@ -179,28 +192,54 @@ export const InstansiFormModal: React.FC<InstansiFormModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-300">Provinsi (Opsional)</label>
-              <input
-                type="text"
+          {/* Additional Field: Provinsi (Dropdown dengan list hardcoded provinsi di Indonesia) */}
+          {(kategori === 'pemkab_pemkot' || kategori === 'pemprov') && (
+            <div className="space-y-1.5 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <span>Provinsi</span>
+                  <span className="text-red-400">*</span>
+                </label>
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                  kategori === 'pemkab_pemkot'
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                }`}>
+                  {kategori === 'pemkab_pemkot' ? 'Field Tambahan Pemkab/Pemkot' : 'Pemprov'}
+                </span>
+              </div>
+              <select
                 value={provinsi}
-                onChange={(e) => setProvinsi(e.target.value)}
-                placeholder="Misal: Jawa Timur / DKI Jakarta"
-                className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl px-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
+                onChange={(e) => {
+                  setProvinsi(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
+                className="w-full h-10 bg-slate-950 border border-amber-500/50 rounded-xl px-3.5 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+              >
+                <option value="" className="text-slate-500">
+                  -- Pilih Provinsi di Indonesia --
+                </option>
+                {DAFTAR_PROVINSI_INDONESIA.map((p) => (
+                  <option key={p} value={p} className="bg-slate-950 text-white">
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-400">
+                Pilih provinsi induk dari 38 provinsi resmi di Indonesia tempat instansi ini berada.
+              </p>
             </div>
+          )}
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-300">Tahun Anggaran</label>
-              <input
-                type="text"
-                value={tahun}
-                onChange={(e) => setTahun(e.target.value)}
-                placeholder="2024"
-                className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl px-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-300">Tahun Anggaran</label>
+            <input
+              type="text"
+              value={tahun}
+              onChange={(e) => setTahun(e.target.value)}
+              placeholder="2024"
+              className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl px-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+            />
           </div>
 
           <div className="space-y-1.5">

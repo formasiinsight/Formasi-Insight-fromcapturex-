@@ -49,15 +49,66 @@ export default function App() {
   });
 
   const [instansiList, setInstansiList] = useState<InstansiItem[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'formasi' | 'instansi' | 'users'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'formasi' | 'instansi' | 'users'>(() => {
+    try {
+      const savedTab = localStorage.getItem('sscasn_active_tab') as any;
+      if (['dashboard', 'formasi', 'instansi', 'users'].includes(savedTab)) {
+        return savedTab;
+      }
+    } catch (_) {}
+    return 'dashboard';
+  });
   const [navSourceTab, setNavSourceTab] = useState<'dashboard' | null>(null);
-  const [selectedInstansiId, setSelectedInstansiId] = useState<string>('ALL');
-  const [selectedJenjang, setSelectedJenjang] = useState<string>('ALL');
-  const [selectedJurusan, setSelectedJurusan] = useState<string>('');
+  const [selectedInstansiId, setSelectedInstansiId] = useState<string>(() => {
+    try {
+      return localStorage.getItem('sscasn_filter_instansi') || 'ALL';
+    } catch {
+      return 'ALL';
+    }
+  });
+  const [selectedJenjang, setSelectedJenjang] = useState<string>(() => {
+    try {
+      return localStorage.getItem('sscasn_filter_jenjang') || 'ALL';
+    } catch {
+      return 'ALL';
+    }
+  });
+  const [selectedJurusan, setSelectedJurusan] = useState<string>(() => {
+    try {
+      return localStorage.getItem('sscasn_filter_jurusan') || '';
+    } catch {
+      return '';
+    }
+  });
   const [globalNotification, setGlobalNotification] = useState<{
     type: 'error' | 'success';
     message: string;
   } | null>(null);
+
+  // Sync state changes with localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('sscasn_filter_instansi', selectedInstansiId);
+    } catch (_) {}
+  }, [selectedInstansiId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('sscasn_filter_jenjang', selectedJenjang);
+    } catch (_) {}
+  }, [selectedJenjang]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('sscasn_filter_jurusan', selectedJurusan);
+    } catch (_) {}
+  }, [selectedJurusan]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('sscasn_active_tab', activeTab);
+    } catch (_) {}
+  }, [activeTab]);
 
   // Listen to auth changes
   useEffect(() => {
@@ -117,12 +168,23 @@ export default function App() {
       const list = await loadInstansiListAsync();
       setInstansiList(list);
 
-      // Default select Pemkab Jember if available
-      const jember = list.find((i) => i.id === 'instansi-pemkab-jember');
-      if (jember) {
-        setSelectedInstansiId(jember.id);
-      } else if (list.length > 0) {
-        setSelectedInstansiId(list[0].id);
+      // Retain previously selected instansi or fallback to Jember / first item
+      try {
+        const savedInstansiId = localStorage.getItem('sscasn_filter_instansi');
+        if (savedInstansiId && (savedInstansiId === 'ALL' || list.some((i) => i.id === savedInstansiId))) {
+          setSelectedInstansiId(savedInstansiId);
+        } else {
+          const jember = list.find((i) => i.id === 'instansi-pemkab-jember');
+          if (jember) {
+            setSelectedInstansiId(jember.id);
+          } else if (list.length > 0) {
+            setSelectedInstansiId(list[0].id);
+          }
+        }
+      } catch {
+        if (list.length > 0) {
+          setSelectedInstansiId(list[0].id);
+        }
       }
     }
     initStorage();
@@ -544,7 +606,9 @@ export default function App() {
                   onSelectInstansi={(inst) => setSelectedInstansiId(inst.id)}
                   onGoToUpload={(instansiId) => {
                     if (currentUser.role === 'admin') {
-                      setUploadModalTargetId(instansiId);
+                      const target = instansiList.find((i) => i.id === instansiId) || null;
+                      setWizardTargetInstansi(target);
+                      setIsWizardOpen(true);
                     } else {
                       alert('Akses Dibatasi: Upload PDF & Kelola Formasi hanya dapat dilakukan oleh Administrator.');
                     }

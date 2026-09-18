@@ -27,6 +27,7 @@ import { JurusanListDisplay } from './JurusanListDisplay';
 import { LokasiDisplay } from './LokasiDisplay';
 import { BadgeLegendTooltip } from './BadgeLegendTooltip';
 import { HighlightText } from './HighlightText';
+import { FormasiAiAssistant } from './FormasiAiAssistant';
 
 const RATIO_LEGEND = [
   { label: 'Tinggi', condition: '> 1:3', colorClass: 'text-rose-400', bgDotClass: 'bg-rose-500' },
@@ -559,6 +560,33 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
     const start = (currentPage - 1) * pageSize;
     return sortedFormasis.slice(start, start + pageSize);
   }, [sortedFormasis, currentPage, pageSize]);
+
+  // Active Instansi name for AI Context Grounding
+  const activeInstansiItem = useMemo(() => {
+    return instansiList.find((i) => i.id === selectedInstansiId);
+  }, [instansiList, selectedInstansiId]);
+
+  const activeInstansiName = useMemo(() => {
+    if (selectedInstansiId === 'ALL') return 'Semua Instansi Terdaftar';
+    return activeInstansiItem?.nama || 'Instansi Terpilih';
+  }, [selectedInstansiId, activeInstansiItem]);
+
+  // Formatted data subset for Formasi AI Assistant (active filtered rows)
+  const aiFormasiList = useMemo(() => {
+    return sortedFormasis.map((item) => ({
+      jabatan: item.block.header?.namaJabatan || item.block.header?.jabatanFormasi || item.namaJab,
+      lokasi: item.block.header?.namaLokasi || item.block.header?.lokasiFormasi || '-',
+      jenisFormasi: item.block.header?.namaJenisFormasi || item.block.header?.jenisFormasi || 'UMUM',
+      pendidikan: item.block.header?.pendidikan || '-',
+      kuota: item.kuota,
+      pelamarSkb: item.blockPesertaCount,
+      totalPesertaSkb: item.blockPesertaCount,
+      rasio: item.ratio,
+      minSkd: item.minSkdNum,
+      minSkb: item.minSkbNum,
+      cutoffNilaiAkhir: item.cutNum > 0 ? item.cutNum : null,
+    }));
+  }, [sortedFormasis]);
 
   const resetFilters = () => {
     setSelectedJabatan('');
@@ -1259,6 +1287,14 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
           </div>
         )}
       </div>
+
+      {/* ASISTEN AI TANYA FORMASI (HANYA MEMBACA DATA AKTIF & ALOKASI 50% KUOTA) */}
+      <FormasiAiAssistant
+        instansiName={activeInstansiName}
+        selectedJurusan={selectedPendidikan === 'ALL' ? '' : selectedPendidikan}
+        selectedJenjang={selectedJenjang === 'ALL' ? '' : selectedJenjang}
+        formasiList={aiFormasiList}
+      />
     </div>
   );
 };

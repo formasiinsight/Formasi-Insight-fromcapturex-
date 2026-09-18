@@ -13,6 +13,7 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  RotateCcw,
 } from 'lucide-react';
 import { InstansiItem, SSCASNFormasiBlock } from '../types';
 import { getFormasiKuota as calculateKuota } from '../utils/kuotaUtils';
@@ -44,10 +45,38 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
   onViewPeserta,
 }) => {
   // State for Jenjang and Free text Jurusan (Input vs Applied for trigger point)
-  const [inputJenjang, setInputJenjang] = useState<string>(externalJenjang || 'ALL');
-  const [inputJurusan, setInputJurusan] = useState<string>(externalJurusan || '');
-  const [appliedJenjang, setAppliedJenjang] = useState<string>(externalJenjang || 'ALL');
-  const [appliedJurusan, setAppliedJurusan] = useState<string>(externalJurusan || '');
+  const [inputJenjang, setInputJenjang] = useState<string>(() => {
+    if (externalJenjang !== undefined && externalJenjang !== '') return externalJenjang;
+    try {
+      return localStorage.getItem('sscasn_filter_jenjang') || 'ALL';
+    } catch {
+      return 'ALL';
+    }
+  });
+  const [inputJurusan, setInputJurusan] = useState<string>(() => {
+    if (externalJurusan !== undefined && externalJurusan !== '') return externalJurusan;
+    try {
+      return localStorage.getItem('sscasn_filter_jurusan') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [appliedJenjang, setAppliedJenjang] = useState<string>(() => {
+    if (externalJenjang !== undefined && externalJenjang !== '') return externalJenjang;
+    try {
+      return localStorage.getItem('sscasn_filter_jenjang') || 'ALL';
+    } catch {
+      return 'ALL';
+    }
+  });
+  const [appliedJurusan, setAppliedJurusan] = useState<string>(() => {
+    if (externalJurusan !== undefined && externalJurusan !== '') return externalJurusan;
+    try {
+      return localStorage.getItem('sscasn_filter_jurusan') || '';
+    } catch {
+      return '';
+    }
+  });
 
   // Sync external filters if updated externally
   React.useEffect(() => {
@@ -68,11 +97,32 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
     if (e) e.preventDefault();
     setAppliedJenjang(inputJenjang);
     setAppliedJurusan(inputJurusan);
+    try {
+      localStorage.setItem('sscasn_filter_jenjang', inputJenjang);
+      localStorage.setItem('sscasn_filter_jurusan', inputJurusan);
+    } catch (_) {}
     if (externalOnSelectJenjang) {
       externalOnSelectJenjang(inputJenjang);
     }
     if (externalOnSelectJurusan) {
       externalOnSelectJurusan(inputJurusan);
+    }
+  };
+
+  const handleResetFilter = () => {
+    setInputJenjang('ALL');
+    setInputJurusan('');
+    setAppliedJenjang('ALL');
+    setAppliedJurusan('');
+    try {
+      localStorage.setItem('sscasn_filter_jenjang', 'ALL');
+      localStorage.setItem('sscasn_filter_jurusan', '');
+    } catch (_) {}
+    if (externalOnSelectJenjang) {
+      externalOnSelectJenjang('ALL');
+    }
+    if (externalOnSelectJurusan) {
+      externalOnSelectJurusan('');
     }
   };
 
@@ -413,8 +463,8 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
             </div>
           </div>
 
-          {/* 3. Apply Trigger Button */}
-          <div className="shrink-0">
+          {/* 3. Apply Trigger Button & Reset */}
+          <div className="shrink-0 flex items-center gap-2">
             <button
               type="submit"
               className="w-full md:w-auto h-11 px-5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer border border-indigo-400/30"
@@ -422,6 +472,17 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
               <Search className="w-3.5 h-3.5" />
               <span>Terapkan Filter</span>
             </button>
+            {(appliedJurusan || inputJurusan || appliedJenjang !== 'ALL' || inputJenjang !== 'ALL') && (
+              <button
+                type="button"
+                onClick={handleResetFilter}
+                className="h-11 px-3.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                title="Reset filter pendidikan"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Reset</span>
+              </button>
+            )}
           </div>
         </form>
       </div>

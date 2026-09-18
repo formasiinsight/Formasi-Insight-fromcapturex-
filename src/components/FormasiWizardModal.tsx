@@ -554,6 +554,11 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
       return;
     }
 
+    if (kategori === 'pemkab_pemkot' && !provinsi.trim()) {
+      setStep2Error('Provinsi wajib dipilih untuk instansi Pemerintah Kabupaten / Kota (Pemkab/Pemkot).');
+      return;
+    }
+
     if (trimmedNama.toLowerCase() === trimmedKode.toLowerCase()) {
       setStep2Error('Nama instansi dan Kode instansi tidak boleh sama. Masukkan nama instansi yang valid dan kode instansi BKN.');
       return;
@@ -629,7 +634,7 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
         nama: nama.trim(),
         kode: kode.trim(),
         kategori,
-        provinsi: provinsi.trim() || undefined,
+        provinsi: (kategori === 'pemkab_pemkot' || kategori === 'pemprov') ? (provinsi.trim() || undefined) : undefined,
         tahun: tahun.trim() || '2024',
         notes: notes.trim() || undefined,
         parsedData: finalResultReady || undefined,
@@ -795,7 +800,14 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
           </label>
           <select
             value={kategori}
-            onChange={(e) => setKategori(e.target.value as InstansiKategori)}
+            onChange={(e) => {
+              const newKategori = e.target.value as InstansiKategori;
+              setKategori(newKategori);
+              if (newKategori !== 'pemkab_pemkot' && newKategori !== 'pemprov') {
+                setProvinsi('');
+              }
+              if (step2Error) setStep2Error(null);
+            }}
             className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer"
           >
             <option value="kementerian">Kementerian</option>
@@ -805,30 +817,48 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
           </select>
         </div>
 
-        {/* Provinsi (Wilayah) */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-            <span>Provinsi Wilayah (Opsional)</span>
-            {provinsi && (
-              <span className="text-[11px] text-indigo-300 font-medium truncate max-w-[120px]">{provinsi}</span>
-            )}
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              list="wizard-provinsi-list"
-              value={provinsi}
-              onChange={(e) => setProvinsi(e.target.value)}
-              placeholder="Pilih atau ketik nama provinsi..."
-              className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
-            />
-            <datalist id="wizard-provinsi-list">
-              {DAFTAR_PROVINSI_INDONESIA.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
+        {/* Additional Field: Provinsi (Dropdown dengan list hardcoded provinsi di Indonesia) */}
+        {(kategori === 'pemkab_pemkot' || kategori === 'pemprov') && (
+          <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+            <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span>Provinsi</span>
+                <span className="text-rose-400 font-bold">*</span>
+              </span>
+              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                kategori === 'pemkab_pemkot'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                  : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+              }`}>
+                {kategori === 'pemkab_pemkot' ? 'Field Tambahan Pemkab/Pemkot' : 'Pemprov'}
+              </span>
+            </label>
+            <div className="relative">
+              <select
+                value={provinsi}
+                onChange={(e) => {
+                  setProvinsi(e.target.value);
+                  if (step2Error) setStep2Error(null);
+                }}
+                className="w-full bg-slate-900 border border-amber-500/50 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all cursor-pointer"
+              >
+                <option value="" className="text-slate-500">
+                  -- Pilih Provinsi di Indonesia --
+                </option>
+                {DAFTAR_PROVINSI_INDONESIA.map((p) => (
+                  <option key={p} value={p} className="bg-slate-900 text-white">
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {kategori === 'pemkab_pemkot'
+                ? 'Pilih provinsi induk tempat kabupaten atau kota ini berada.'
+                : 'Pilih wilayah provinsi yang sesuai.'}
+            </p>
           </div>
-        </div>
+        )}
 
         {/* Tahun Pengadaan */}
         <div className="space-y-1.5">
