@@ -264,11 +264,11 @@ function formasiDbRowToBlock(row: any, idx: number, instansiNama: string, instan
       discrepanciesList: [],
     },
     analytics: {
-      minSkd: parseNullableNum(row.min_skd),
+      minSkd: totalLulus > 0 ? parseNullableNum(row.min_skd) : null,
       maxSkd: parseNullableNum(row.max_skd),
-      minSkb: parseNullableNum(row.min_skb),
+      minSkb: totalLulus > 0 ? parseNullableNum(row.min_skb) : null,
       maxSkb: parseNullableNum(row.max_skb),
-      cutoffNilaiAkhir: parseNullableNum(row.cutoff_nilai_akhir),
+      cutoffNilaiAkhir: totalLulus > 0 ? parseNullableNum(row.cutoff_nilai_akhir) : null,
       highestNilaiAkhir: parseNullableNum(row.highest_nilai_akhir),
       rasioKeketatan: row.rasio_keketatan || undefined,
       totalPesertaSkb: totalPeserta,
@@ -330,127 +330,13 @@ async function fetchAllFormasiForInstansiIds(supabase: any, instansiIds: string[
 export async function loadInstansiListAsync(forceRefresh = false): Promise<InstansiItem[]> {
   if (forceRefresh) {
     runtimeCache = null;
+  } else if (runtimeCache && runtimeCache.length > 0) {
+    return runtimeCache;
   }
 
-  emitCloudSyncEvent('syncing', 'Menghubungkan ke Supabase Cloud Database...');
+  emitCloudSyncEvent('syncing', 'Memuat data dari database...');
 
-  // 1. Direct Supabase Query (Works natively on Vercel without backend server)
-  try {
-    const supabase = getSupabaseClient();
-    const { data: sbData, error: sbError } = await supabase
-      .from('instansi')
-      .select('*')
-      .order('updated_at', { ascending: false });
-
-    if (!sbError && Array.isArray(sbData) && sbData.length > 0) {
-      let instansiList = sbData.map(dbRowToInstansi);
-
-      // Identify instansi needing full formasi hydration:
-      // When parsedData is missing, empty, has fewer formations than total_formasi in DB, or is missing analytics
-      const instansiNeedingFormasi = instansiList.filter((i) => {
-        const expectedTotal = i.totalFormasiDB || i.parsedData?.meta?.totalFormasiCount || 0;
-        const currentCount = i.parsedData?.formasiList?.length || 0;
-        const hasMissingAnalytics =
-          currentCount > 0 &&
-          !i.parsedData?.formasiList?.some(
-            (f: any) => f.analytics && (f.analytics.minSkd != null || f.analytics.cutoffNilaiAkhir != null)
-          );
-        return !i.parsedData || currentCount === 0 || (expectedTotal > 0 && currentCount < expectedTotal) || hasMissingAnalytics;
-      });
-
-      if (instansiNeedingFormasi.length > 0) {
-        try {
-          const allFormasiRows = await fetchAllFormasiForInstansiIds(
-            supabase,
-            instansiNeedingFormasi.map((i) => i.id)
-          );
-
-          if (Array.isArray(allFormasiRows) && allFormasiRows.length > 0) {
-            const formasiByInstansi = new Map<string, any[]>();
-            for (const fRow of allFormasiRows) {
-              const iId = fRow.instansi_id;
-              if (!formasiByInstansi.has(iId)) {
-                formasiByInstansi.set(iId, []);
-              }
-              formasiByInstansi.get(iId)!.push(fRow);
-            }
-
-            instansiList = instansiList.map((inst) => {
-              const fRows = formasiByInstansi.get(inst.id);
-              const expectedTotal = inst.totalFormasiDB || inst.parsedData?.meta?.totalFormasiCount || 0;
-              const currentCount = inst.parsedData?.formasiList?.length || 0;
-              const hasMissingAnalytics =
-                currentCount > 0 &&
-                !inst.parsedData?.formasiList?.some(
-                  (f: any) => f.analytics && (f.analytics.minSkd != null || f.analytics.cutoffNilaiAkhir != null)
-                );
-
-              if (fRows && fRows.length > 0 && (!inst.parsedData || currentCount < (expectedTotal || fRows.length) || hasMissingAnalytics)) {
-                const formasiList = fRows.map((r, idx) => formasiDbRowToBlock(r, idx, inst.nama, inst.kode));
-                const totalPeserta = formasiList.reduce((sum, f) => sum + (f.pesertaCount || 0), 0);
-                const defaultHeader = formasiList[0]?.header || {
-                  instansi: inst.nama,
-                  kodeInstansi: inst.kode,
-                  jabatanFormasi: '',
-                  lokasiFormasi: '',
-                  jenisFormasi: 'UMUM',
-                  pendidikan: '',
-                  jumlahKuota: 1,
-                };
-                return {
-                  ...inst,
-                  status: 'terdaftar' as const,
-                  parsedData: {
-                    meta: {
-                      docTitle: `Hasil Integrasi SSCASN - ${inst.nama}`,
-                      tahun: inst.tahun || '2024',
-                      parsedAt: inst.updatedAt || new Date().toISOString(),
-                      sourceType: 'pdf' as const,
-                      fileName: inst.pdfFileName,
-                      totalFormasiCount: formasiList.length,
-                      totalPesertaCount: totalPeserta,
-                    },
-                    formasiList,
-                    pesertaList: [],
-                    header: defaultHeader,
-                    verification: {
-                      isValid: true,
-                      scoreAccuracyPercent: 100,
-                      totalRecords: totalPeserta,
-                      discrepanciesCount: 0,
-                      passedCount: 0,
-                      failedCount: 0,
-                      discrepanciesList: [],
-                    },
-                  },
-                };
-              }
-              return inst;
-            });
-          }
-        } catch (fErr) {
-          console.warn('[Supabase Direct] Formasi table query notice:', fErr);
-        }
-      }
-
-      const normalized = deduplicateInstansiList(instansiList);
-      runtimeCache = normalized;
-      lastCloudSyncTimestamp = new Date().toISOString();
-
-      // Update local mirror caches asynchronously
-      saveToLocalIndexedDB(normalized).catch(() => {});
-      saveMetadataToLocalStorage(normalized);
-
-      emitCloudSyncEvent('synced', `Berhasil memuat ${normalized.length} instansi lengkap dari Supabase Cloud`);
-      return normalized;
-    } else if (sbError) {
-      console.warn('[Supabase Direct] Notice:', sbError.message);
-    }
-  } catch (directSbErr) {
-    console.warn('[Supabase Direct] Failed to query Supabase directly, trying API/cache:', directSbErr);
-  }
-
-  // 2. Fallback: Fetch from Cloud Server API (/api/instansi) if running with Express
+  // 1. FAST PATH: Fetch from Cloud Server API (/api/instansi) - Instant (< 50ms) and authoritative
   try {
     const refreshParam = forceRefresh ? '?refresh=true' : '';
     const response = await fetch(`/api/instansi${refreshParam}`, {
@@ -464,60 +350,7 @@ export async function loadInstansiListAsync(forceRefresh = false): Promise<Insta
     if (response.ok) {
       const result = await response.json();
       if (result.success && Array.isArray(result.data) && result.data.length > 0) {
-        let instList: InstansiItem[] = result.data;
-
-        // Check if any instansi in the API result still needs formasi hydration
-        for (let i = 0; i < instList.length; i++) {
-          const inst = instList[i];
-          const exp = inst.totalFormasiDB || inst.parsedData?.meta?.totalFormasiCount || 0;
-          const cur = inst.parsedData?.formasiList?.length || 0;
-          const hasMissingAnalytics =
-            cur > 0 &&
-            !inst.parsedData?.formasiList?.some(
-              (f: any) => f.analytics && (f.analytics.minSkd != null || f.analytics.cutoffNilaiAkhir != null)
-            );
-          if (exp > 0 && (cur < exp || hasMissingAnalytics)) {
-            try {
-              const fRes = await fetch(`/api/formasi?instansi_id=${encodeURIComponent(inst.id)}&limit=5000`);
-              if (fRes.ok) {
-                const fJson = await fRes.json();
-                if (fJson.success && Array.isArray(fJson.data) && fJson.data.length > 0) {
-                  const hydratedFormasi = fJson.data.map((r: any, idx: number) => formasiDbRowToBlock(r, idx, inst.nama, inst.kode));
-                  instList[i] = {
-                    ...inst,
-                    status: 'terdaftar' as const,
-                    parsedData: {
-                      ...(inst.parsedData || {
-                        meta: {
-                          docTitle: `Hasil Integrasi SSCASN - ${inst.nama}`,
-                          tahun: inst.tahun || '2024',
-                          parsedAt: inst.updatedAt || new Date().toISOString(),
-                          sourceType: 'pdf' as const,
-                          fileName: inst.pdfFileName,
-                          totalFormasiCount: hydratedFormasi.length,
-                          totalPesertaCount: 0,
-                        },
-                        formasiList: [],
-                        pesertaList: [],
-                        header: hydratedFormasi[0]?.header || {
-                          instansi: inst.nama,
-                          kodeInstansi: inst.kode,
-                          jabatanFormasi: '',
-                          lokasiFormasi: '',
-                          jenisFormasi: 'UMUM',
-                          pendidikan: '',
-                          jumlahKuota: 1,
-                        },
-                      }),
-                      formasiList: hydratedFormasi,
-                    },
-                  };
-                }
-              }
-            } catch {}
-          }
-        }
-
+        const instList: InstansiItem[] = result.data;
         const normalized = deduplicateInstansiList(instList);
         runtimeCache = normalized;
         lastCloudSyncTimestamp = result.lastUpdated || new Date().toISOString();
@@ -525,7 +358,7 @@ export async function loadInstansiListAsync(forceRefresh = false): Promise<Insta
         saveToLocalIndexedDB(normalized).catch(() => {});
         saveMetadataToLocalStorage(normalized);
 
-        emitCloudSyncEvent('synced', 'Data tersinkronisasi dari Cloud Server');
+        emitCloudSyncEvent('synced', `Berhasil memuat ${normalized.length} instansi dari server`);
         return normalized;
       }
     }
@@ -533,7 +366,37 @@ export async function loadInstansiListAsync(forceRefresh = false): Promise<Insta
     // API not reachable (expected on static Vercel)
   }
 
-  // 3. Fallback to Local IndexedDB Cache if Cloud unreachable
+  // 2. Direct Supabase Query (Fallback for static Vercel environments with 2.5s strict timeout)
+  try {
+    const supabase = getSupabaseClient();
+    const queryPromise = supabase
+      .from('instansi')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+      setTimeout(() => reject(new Error('Supabase connection timeout')), 2500)
+    );
+
+    const { data: sbData, error: sbError } = (await Promise.race([queryPromise, timeoutPromise])) as any;
+
+    if (!sbError && Array.isArray(sbData) && sbData.length > 0) {
+      const instansiList = sbData.map(dbRowToInstansi);
+      const normalized = deduplicateInstansiList(instansiList);
+      runtimeCache = normalized;
+      lastCloudSyncTimestamp = new Date().toISOString();
+
+      saveToLocalIndexedDB(normalized).catch(() => {});
+      saveMetadataToLocalStorage(normalized);
+
+      emitCloudSyncEvent('synced', `Berhasil memuat ${normalized.length} instansi lengkap dari Supabase Cloud`);
+      return normalized;
+    }
+  } catch (directSbErr) {
+    console.warn('[Supabase Direct] Notice:', directSbErr);
+  }
+
+  // 3. Fallback to Local IndexedDB Cache if Cloud/API unreachable
   const localDbItems = await loadFromLocalIndexedDB();
   if (localDbItems !== null && Array.isArray(localDbItems) && localDbItems.length > 0) {
     const normalized = deduplicateInstansiList(localDbItems);
@@ -689,14 +552,16 @@ export async function updateInstansiParsedDataAsync(
       console.warn('[Supabase Parsed Update]:', sbErr);
     }
 
-    // Also notify backend API if available
+    // Also notify backend API if available and await persistence
     try {
-      fetch(`/api/instansi/${encodeURIComponent(instansiId)}`, {
+      await fetch(`/api/instansi/${encodeURIComponent(instansiId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(targetItem),
-      }).catch(() => {});
-    } catch {}
+      });
+    } catch (apiErr) {
+      console.warn('[Backend Parsed Update]:', apiErr);
+    }
   }
 
   runtimeCache = updatedList;

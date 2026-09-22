@@ -1268,22 +1268,26 @@ export async function parsePdfWithCoordinates(
           if (!b.analytics) {
             const list = Array.isArray(b.pesertaList) ? b.pesertaList : [];
             const kuota = Number(b.header?.jumlahKuota) || Number(b.header?.kuotaJabatan) || 1;
-            const lulusList = list.filter((p) => p?.keterangan && String(p.keterangan).trim().toUpperCase().startsWith('P/L'));
-            const passedCandidates = lulusList.length > 0 ? lulusList : list;
+            const lulusList = list.filter((p) => {
+              const ket = String(p?.keterangan || '').trim().toUpperCase().replace(/\s+/g, '');
+              return ket.startsWith('P/L');
+            });
 
-            const skdScores = passedCandidates.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
+            const skdScoresLulus = lulusList.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
             const allSkdScores = list.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
-            const skbScores = passedCandidates.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
+            const skbScoresLulus = lulusList.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
             const allSkbScores = list.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
             const akhirScores = list.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
             const lulusAkhirScores = lulusList.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
 
-            const minSkd = skdScores.length > 0 ? Math.min(...skdScores) : (allSkdScores.length > 0 ? Math.min(...allSkdScores) : null);
+            // Min SKD and Min SKB ONLY from candidates who passed (P/L).
+            // Non-passing (TL) candidates must NOT be displayed as min scores.
+            const minSkd = skdScoresLulus.length > 0 ? Math.min(...skdScoresLulus) : null;
             const maxSkd = allSkdScores.length > 0 ? Math.max(...allSkdScores) : null;
-            const minSkb = skbScores.length > 0 ? Math.min(...skbScores) : (allSkbScores.length > 0 ? Math.min(...allSkbScores) : null);
+            const minSkb = skbScoresLulus.length > 0 ? Math.min(...skbScoresLulus) : null;
             const maxSkb = allSkbScores.length > 0 ? Math.max(...allSkbScores) : null;
             const highestNilaiAkhir = akhirScores.length > 0 ? Math.max(...akhirScores) : null;
-            const cutoffNilaiAkhir = lulusAkhirScores.length > 0 ? Math.min(...lulusAkhirScores) : (akhirScores.length > 0 ? Math.min(...akhirScores) : null);
+            const cutoffNilaiAkhir = lulusAkhirScores.length > 0 ? Math.min(...lulusAkhirScores) : null;
 
             b.analytics = {
               totalPesertaSkb: list.length,

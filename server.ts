@@ -62,15 +62,20 @@ function computeBlockAnalytics(pesertaList: any[], kuota: number, existingAnalyt
   // If no participants present in memory, preserve existing valid analytics
   if (list.length === 0) {
     if (existingAnalytics && (existingAnalytics.minSkd !== undefined || existingAnalytics.cutoffNilaiAkhir !== undefined || existingAnalytics.min_skd !== undefined)) {
+      const totalLulus = typeof existingAnalytics.totalLulus === 'number'
+        ? existingAnalytics.totalLulus
+        : (typeof existingAnalytics.total_lulus === 'number' ? existingAnalytics.total_lulus : 0);
+      const hasLulus = totalLulus > 0;
+
       return {
         totalPesertaSkb: typeof existingAnalytics.totalPesertaSkb === 'number' ? existingAnalytics.totalPesertaSkb : (typeof existingAnalytics.total_peserta_skb === 'number' ? existingAnalytics.total_peserta_skb : 0),
-        totalLulus: typeof existingAnalytics.totalLulus === 'number' ? existingAnalytics.totalLulus : (typeof existingAnalytics.total_lulus === 'number' ? existingAnalytics.total_lulus : 0),
+        totalLulus,
         rasioKeketatan: existingAnalytics.rasioKeketatan || existingAnalytics.rasio_keketatan || (kuota > 0 ? `1 : ${kuota}` : '-'),
-        minSkd: parseNum(existingAnalytics.minSkd ?? existingAnalytics.min_skd),
+        minSkd: hasLulus ? parseNum(existingAnalytics.minSkd ?? existingAnalytics.min_skd) : null,
         maxSkd: parseNum(existingAnalytics.maxSkd ?? existingAnalytics.max_skd),
-        minSkb: parseNum(existingAnalytics.minSkb ?? existingAnalytics.min_skb),
+        minSkb: hasLulus ? parseNum(existingAnalytics.minSkb ?? existingAnalytics.min_skb) : null,
         maxSkb: parseNum(existingAnalytics.maxSkb ?? existingAnalytics.max_skb),
-        cutoffNilaiAkhir: parseNum(existingAnalytics.cutoffNilaiAkhir ?? existingAnalytics.cutoff_nilai_akhir),
+        cutoffNilaiAkhir: hasLulus ? parseNum(existingAnalytics.cutoffNilaiAkhir ?? existingAnalytics.cutoff_nilai_akhir) : null,
         highestNilaiAkhir: parseNum(existingAnalytics.highestNilaiAkhir ?? existingAnalytics.highest_nilai_akhir),
       };
     }
@@ -89,29 +94,33 @@ function computeBlockAnalytics(pesertaList: any[], kuota: number, existingAnalyt
 
   const totalPesertaSkb = list.length;
   // SSCASN lulus status: starts with P/L (e.g. P/L, P/L-1, P/L-2, P/L-U3)
-  const lulusList = list.filter((p) => p?.keterangan && String(p.keterangan).trim().toUpperCase().startsWith('P/L'));
+  const lulusList = list.filter((p) => {
+    const ket = String(p?.keterangan || '').trim().toUpperCase().replace(/\s+/g, '');
+    return ket.startsWith('P/L');
+  });
   const totalLulus = lulusList.length;
 
-  // Candidates who passed are preferred for min scores; fallback to all if none passed
-  const passedCandidates = lulusList.length > 0 ? lulusList : list;
+  // CRITICAL: Nilai Min SKD, Min SKB, dan Cutoff Nilai Akhir HANYA boleh diambil dari peserta yang Lulus (P/L).
+  // Peserta Tidak Lulus (TL / TH / TMS / dsb) TIDAK BOLEH dijadikan nilai minimum.
+  const skdScoresLulus = lulusList.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
+  const skbScoresLulus = lulusList.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
+  const akhirScoresLulus = lulusList.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
 
-  const skdScores = passedCandidates.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
   const allSkdScores = list.map((p) => Number(p.totalSkd) || 0).filter((s) => s > 0);
-
-  const skbScores = passedCandidates.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
   const allSkbScores = list.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
+  const allAkhirScores = list.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
 
-  const akhirScores = list.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
-  const lulusAkhirScores = lulusList.map((p) => Number(p.nilaiAkhir) || 0).filter((s) => s > 0);
-
-  const minSkd = skdScores.length > 0 ? Math.min(...skdScores) : (allSkdScores.length > 0 ? Math.min(...allSkdScores) : parseNum(existingAnalytics?.minSkd ?? existingAnalytics?.min_skd));
+  // Min SKD: HANYA dari lulusList. Jika tidak ada yang lulus (totalLulus === 0), nilainya null (jangan tampilkan TL).
+  const minSkd = skdScoresLulus.length > 0 ? Math.min(...skdScoresLulus) : null;
   const maxSkd = allSkdScores.length > 0 ? Math.max(...allSkdScores) : parseNum(existingAnalytics?.maxSkd ?? existingAnalytics?.max_skd);
 
-  const minSkb = skbScores.length > 0 ? Math.min(...skbScores) : (allSkbScores.length > 0 ? Math.min(...allSkbScores) : parseNum(existingAnalytics?.minSkb ?? existingAnalytics?.min_skb));
+  // Min SKB: HANYA dari lulusList. Jika tidak ada yang lulus (totalLulus === 0), nilainya null.
+  const minSkb = skbScoresLulus.length > 0 ? Math.min(...skbScoresLulus) : null;
   const maxSkb = allSkbScores.length > 0 ? Math.max(...allSkbScores) : parseNum(existingAnalytics?.maxSkb ?? existingAnalytics?.max_skb);
 
-  const highestNilaiAkhir = akhirScores.length > 0 ? Math.max(...akhirScores) : parseNum(existingAnalytics?.highestNilaiAkhir ?? existingAnalytics?.highest_nilai_akhir);
-  const cutoffNilaiAkhir = lulusAkhirScores.length > 0 ? Math.min(...lulusAkhirScores) : (akhirScores.length > 0 ? Math.min(...akhirScores) : parseNum(existingAnalytics?.cutoffNilaiAkhir ?? existingAnalytics?.cutoff_nilai_akhir));
+  const highestNilaiAkhir = allAkhirScores.length > 0 ? Math.max(...allAkhirScores) : parseNum(existingAnalytics?.highestNilaiAkhir ?? existingAnalytics?.highest_nilai_akhir);
+  // Cutoff Nilai Akhir: Nilai terendah dari peserta yang LULUS (P/L)
+  const cutoffNilaiAkhir = akhirScoresLulus.length > 0 ? Math.min(...akhirScoresLulus) : null;
 
   const rasioKeketatan = kuota > 0 && totalPesertaSkb > 0
     ? `1 : ${(totalPesertaSkb / kuota).toFixed(1)}`
@@ -508,11 +517,11 @@ function formasiDbRowToBlock(row: any, idx: number, instansiNama: string, instan
       discrepanciesList: [],
     },
     analytics: {
-      minSkd: parseNullableNum(row.min_skd),
+      minSkd: totalLulus > 0 ? parseNullableNum(row.min_skd) : null,
       maxSkd: parseNullableNum(row.max_skd),
-      minSkb: parseNullableNum(row.min_skb),
+      minSkb: totalLulus > 0 ? parseNullableNum(row.min_skb) : null,
       maxSkb: parseNullableNum(row.max_skb),
-      cutoffNilaiAkhir: parseNullableNum(row.cutoff_nilai_akhir),
+      cutoffNilaiAkhir: totalLulus > 0 ? parseNullableNum(row.cutoff_nilai_akhir) : null,
       highestNilaiAkhir: parseNullableNum(row.highest_nilai_akhir),
       rasioKeketatan: row.rasio_keketatan || undefined,
       totalPesertaSkb: totalPeserta,
@@ -601,13 +610,19 @@ async function initCloudStorage() {
       }
     }
 
-    // 1. Try fetching from Supabase 'instansi' table
+    // 1. Try fetching from Supabase 'instansi' table with fast 2s timeout
     try {
       const supabase = getSupabase();
-      const { data, error } = await supabase
+      const fetchPromise = supabase
         .from('instansi')
         .select('*')
         .order('updated_at', { ascending: false });
+
+      const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+        setTimeout(() => reject(new Error('Supabase query timeout')), 2000)
+      );
+
+      const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
 
       if (!error && Array.isArray(data) && data.length > 0) {
         const sbList = data.map(dbRowToInstansi);
@@ -718,14 +733,21 @@ async function initCloudStorage() {
       return;
     }
 
-    // 3. Fallback to empty catalog
+    // 3. Fallback: If memoryInstansiCache already has data, keep it!
+    if (memoryInstansiCache.length > 0) {
+      console.log(`[Cloud DB] Retaining ${memoryInstansiCache.length} existing in-memory records.`);
+      return;
+    }
+
+    // 4. Fallback to empty catalog only if truly nothing exists, but do NOT overwrite existing files
     memoryInstansiCache = [];
-    await safeWriteJsonFile(CLOUD_DB_FILE, memoryInstansiCache);
     lastCloudSyncTime = new Date().toISOString();
     console.log(`[Cloud DB] Initialized clean cloud database (empty catalog).`);
   } catch (err) {
-    console.error('[Cloud DB] Error initializing cloud storage, using empty fallback:', err);
-    memoryInstansiCache = [];
+    console.error('[Cloud DB] Error initializing cloud storage, preserving existing cache if available:', err);
+    if (!memoryInstansiCache || memoryInstansiCache.length === 0) {
+      memoryInstansiCache = [];
+    }
   }
 }
 
@@ -1219,7 +1241,18 @@ Tolong berikan analisis dan jawaban terbaik berdasarkan data formasi aktif di at
   app.get('/api/instansi', async (req, res) => {
     try {
       if (req.query.refresh === 'true' || req.query.refresh === '1') {
-        await initCloudStorage();
+        if (fs.existsSync(CLOUD_DB_FILE)) {
+          try {
+            const fileData = await fsPromises.readFile(CLOUD_DB_FILE, 'utf-8');
+            const parsed = JSON.parse(fileData);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              memoryInstansiCache = parsed;
+              lastCloudSyncTime = new Date().toISOString();
+            }
+          } catch (e) {
+            console.warn('[Cloud File DB] Notice reading cache on refresh:', e);
+          }
+        }
       }
 
       res.json({

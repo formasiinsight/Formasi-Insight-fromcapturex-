@@ -161,30 +161,31 @@ export default function App() {
   // 3-Step Wizard Modal State
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [wizardTargetInstansi, setWizardTargetInstansi] = useState<InstansiItem | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
-  // Load initial list asynchronously from IndexedDB on mount
+  // Load initial list asynchronously from server API / IndexedDB on mount
   useEffect(() => {
     async function initStorage() {
-      const list = await loadInstansiListAsync();
-      setInstansiList(list);
-
-      // Retain previously selected instansi or fallback to Jember / first item
+      setIsLoadingData(true);
       try {
-        const savedInstansiId = localStorage.getItem('sscasn_filter_instansi');
-        if (savedInstansiId && (savedInstansiId === 'ALL' || list.some((i) => i.id === savedInstansiId))) {
-          setSelectedInstansiId(savedInstansiId);
-        } else {
-          const jember = list.find((i) => i.id === 'instansi-pemkab-jember');
-          if (jember) {
-            setSelectedInstansiId(jember.id);
-          } else if (list.length > 0) {
-            setSelectedInstansiId(list[0].id);
+        const list = await loadInstansiListAsync();
+        setInstansiList(list);
+
+        // Retain previously selected instansi or default to ALL
+        try {
+          const savedInstansiId = localStorage.getItem('sscasn_filter_instansi');
+          if (savedInstansiId && (savedInstansiId === 'ALL' || list.some((i) => i.id === savedInstansiId))) {
+            setSelectedInstansiId(savedInstansiId);
+          } else {
+            setSelectedInstansiId('ALL');
           }
+        } catch {
+          setSelectedInstansiId('ALL');
         }
-      } catch {
-        if (list.length > 0) {
-          setSelectedInstansiId(list[0].id);
-        }
+      } catch (err) {
+        console.error('Failed to init storage:', err);
+      } finally {
+        setIsLoadingData(false);
       }
     }
     initStorage();
@@ -331,7 +332,13 @@ export default function App() {
   const handleManualCloudSync = async () => {
     try {
       const refreshed = await loadInstansiListAsync(true);
-      setInstansiList(refreshed);
+      if (refreshed && refreshed.length > 0) {
+        setInstansiList(refreshed);
+        setGlobalNotification({
+          type: 'success',
+          message: `Berhasil memuat ${refreshed.length} data instansi dari database.`,
+        });
+      }
     } catch (err: any) {
       setGlobalNotification({
         type: 'error',
@@ -594,8 +601,18 @@ export default function App() {
                 rightContent={getTabBreadcrumbRightContent()}
               />
 
+              {isLoadingData && instansiList.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-24 px-4 text-center bg-slate-900/40 rounded-2xl border border-slate-800/80 my-4 backdrop-blur-sm shadow-xl">
+                  <div className="w-10 h-10 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin mb-4" />
+                  <h3 className="text-base font-semibold text-slate-200">Memuat Database SSCASN...</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-md">
+                    Sinkronisasi data 90 instansi dan seluruh formasi hasil integrasi SKD &amp; SKB.
+                  </p>
+                </div>
+              )}
+
               {/* TAB 1: DASHBOARD ANALYTICS */}
-              {activeTab === 'dashboard' && (
+              {(!isLoadingData || instansiList.length > 0) && activeTab === 'dashboard' && (
                 <DashboardAnalytics
                   instansi={selectedInstansi}
                   instansiList={instansiList}
@@ -630,7 +647,7 @@ export default function App() {
               )}
 
               {/* TAB 2: FORMASI INSTANSI & FILTER JURUSAN */}
-              {activeTab === 'formasi' && (
+              {(!isLoadingData || instansiList.length > 0) && activeTab === 'formasi' && (
                 <FormasiTableDetailed
                   instansiList={instansiList}
                   selectedInstansiId={selectedInstansiId}
@@ -652,7 +669,7 @@ export default function App() {
               )}
 
               {/* TAB 3: INSTANSI TERDAFTAR MANAGEMENT (ADMIN ONLY) */}
-              {activeTab === 'instansi' && (
+              {(!isLoadingData || instansiList.length > 0) && activeTab === 'instansi' && (
                 currentUser.role === 'admin' ? (
                   <InstansiManager
                     instansiList={instansiList}
@@ -702,7 +719,7 @@ export default function App() {
               )}
 
               {/* TAB 4: USER MANAGEMENT SECTION (ADMIN ONLY) */}
-              {activeTab === 'users' && (
+              {(!isLoadingData || instansiList.length > 0) && activeTab === 'users' && (
                 currentUser.role === 'admin' ? (
                   <UserManagement
                     currentUser={currentUser}

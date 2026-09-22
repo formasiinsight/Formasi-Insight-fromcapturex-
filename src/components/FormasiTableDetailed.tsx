@@ -310,13 +310,63 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
           ratioActiveLabel = 'Longgar';
         }
 
-        const passed = pList.filter((p) => p?.keterangan && p.keterangan.startsWith('P/L'));
+        // Helper untuk mengecek status kelulusan (P/L, P/L-1, P/L-2, dsb) secara akurat
+        const isPLCandidate = (p: SSCASNPeserta) => {
+          if (!p?.keterangan) return false;
+          const s = String(p.keterangan).trim().toUpperCase().replace(/\s+/g, '');
+          return s.startsWith('P/L');
+        };
+
+        const hasPesertaList = pList.length > 0;
+        const passed = hasPesertaList ? pList.filter(isPLCandidate) : [];
+
+        // Hitung total lulus: jika pList ada gunakan passed.length, jika tidak gunakan analytics.totalLulus
+        const totalLulusCount = hasPesertaList
+          ? passed.length
+          : (typeof analytics?.totalLulus === 'number' ? analytics.totalLulus : (typeof (analytics as any)?.total_lulus === 'number' ? (analytics as any).total_lulus : 0));
 
         let minSkdPeserta: SSCASNPeserta | null = null;
-        if (passed.length > 0) {
-          minSkdPeserta = passed.reduce((min, p) => (p.totalSkd < min.totalSkd ? p : min), passed[0]);
+        let minSkdNum: number | null = null;
+        let minSkbNum: number | null = null;
+        let minSkbVal: string = '-';
+        let cutNum = 0;
+        let cut = '-';
+
+        // CRITICAL: Nilai Min SKD, Min SKB, dan Cutoff Nilai Akhir HANYA ditampilkan jika ada peserta yang LULUS (P/L).
+        // Jika tidak ada peserta lulus (totalLulusCount === 0), nilai TL TIDAK BOLEH didisplay (tetap null / '-').
+        if (totalLulusCount > 0) {
+          if (hasPesertaList && passed.length > 0) {
+            const validSkdPassed = passed.filter((p) => (Number(p.totalSkd) || 0) > 0);
+            if (validSkdPassed.length > 0) {
+              minSkdPeserta = validSkdPassed.reduce((min, p) => (Number(p.totalSkd) < Number(min.totalSkd) ? p : min), validSkdPassed[0]);
+              minSkdNum = Number(minSkdPeserta.totalSkd);
+            }
+
+            const validSkbScores = passed.map((p) => Number(p.skb) || 0).filter((s) => s > 0);
+            if (validSkbScores.length > 0) {
+              minSkbNum = Math.min(...validSkbScores);
+              minSkbVal = minSkbNum % 1 === 0 ? minSkbNum.toString() : minSkbNum.toFixed(2);
+            }
+
+            const cuts = passed.map((p) => Number(p.nilaiAkhir) || 0).filter((v) => v > 0);
+            if (cuts.length > 0) {
+              cutNum = Math.min(...cuts);
+              cut = cutNum.toFixed(3);
+            }
+          } else if (!hasPesertaList) {
+            if (analytics?.minSkd != null && Number.isFinite(Number(analytics.minSkd)) && Number(analytics.minSkd) > 0) {
+              minSkdNum = Number(analytics.minSkd);
+            }
+            if (analytics?.minSkb != null && Number.isFinite(Number(analytics.minSkb)) && Number(analytics.minSkb) > 0) {
+              minSkbNum = Number(analytics.minSkb);
+              minSkbVal = minSkbNum % 1 === 0 ? minSkbNum.toString() : minSkbNum.toFixed(2);
+            }
+            if (analytics?.cutoffNilaiAkhir != null && Number.isFinite(Number(analytics.cutoffNilaiAkhir)) && Number(analytics.cutoffNilaiAkhir) > 0) {
+              cutNum = Number(analytics.cutoffNilaiAkhir);
+              cut = cutNum.toFixed(3);
+            }
+          }
         }
-        const minSkdNum: number | null = minSkdPeserta ? minSkdPeserta.totalSkd : (analytics?.minSkd ?? null);
 
         let skdBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
         let skdActiveLabel = 'Sedang';
@@ -333,18 +383,6 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
           }
         }
 
-        let minSkbVal: string = '-';
-        let minSkbNum: number | null = null;
-        if (passed.length > 0) {
-          minSkbNum = Math.min(...passed.map((p) => p.skb));
-        } else if (analytics?.minSkb !== undefined && analytics.minSkb !== null) {
-          minSkbNum = analytics.minSkb;
-        }
-
-        if (minSkbNum !== null) {
-          minSkbVal = minSkbNum % 1 === 0 ? minSkbNum.toString() : minSkbNum.toFixed(2);
-        }
-
         let skbBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
         let skbActiveLabel = 'Sedang';
         if (minSkbNum !== null) {
@@ -359,10 +397,6 @@ export const FormasiTableDetailed: React.FC<FormasiTableDetailedProps> = ({
             skbActiveLabel = 'Longgar';
           }
         }
-
-        const cuts = passed.map((p) => Number(p.nilaiAkhir) || 0).filter((v) => v > 0);
-        let cutNum = cuts.length > 0 ? Math.min(...cuts) : (analytics?.cutoffNilaiAkhir ?? 0);
-        const cut = cutNum > 0 ? cutNum.toFixed(3) : '-';
 
         let kodeJab = h.kodeJabatan || '';
         let namaJab = h.namaJabatan || h.jabatanFormasi || '-';

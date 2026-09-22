@@ -1554,16 +1554,19 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                         const numRatio = kuota > 0 ? pCount / kuota : 0;
                         const ratio = numRatio.toFixed(1);
 
-                        const passed = pList.filter((p: any) => p?.keterangan && String(p.keterangan).trim().startsWith('P/L'));
+                        const isPLCandidate = (p: any) => {
+                          if (!p?.keterangan) return false;
+                          const s = String(p.keterangan).trim().toUpperCase().replace(/\s+/g, '');
+                          return s.startsWith('P/L');
+                        };
+
+                        const hasPesertaList = pList.length > 0;
+                        const passed = hasPesertaList ? pList.filter(isPLCandidate) : [];
                         const analytics = block.analytics;
 
-                        // Cut-off calculation with fallback to pre-calculated block.analytics
-                        let cut = '-';
-                        if (passed.length > 0) {
-                          cut = Math.min(...passed.map((p: any) => Number(p.nilaiAkhir) || 0)).toFixed(3);
-                        } else if (analytics?.cutoffNilaiAkhir != null && Number.isFinite(Number(analytics.cutoffNilaiAkhir))) {
-                          cut = Number(analytics.cutoffNilaiAkhir).toFixed(3);
-                        }
+                        const totalLulusCount = hasPesertaList
+                          ? passed.length
+                          : (typeof analytics?.totalLulus === 'number' ? analytics.totalLulus : (typeof (analytics as any)?.total_lulus === 'number' ? (analytics as any).total_lulus : 0));
 
                         let ratioBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
                         if (numRatio > 3) {
@@ -1574,12 +1577,41 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                           ratioBadgeStyle = 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
                         }
 
+                        let cut = '-';
                         let minSkdPeserta: any = null;
                         let fallbackMinSkdVal: number | null = null;
-                        if (passed.length > 0) {
-                          minSkdPeserta = passed.reduce((min: any, p: any) => (Number(p.totalSkd || 0) < Number(min.totalSkd || 0) ? p : min), passed[0]);
-                        } else if (analytics?.minSkd != null && Number.isFinite(Number(analytics.minSkd))) {
-                          fallbackMinSkdVal = Number(analytics.minSkd);
+                        let minSkbVal = '-';
+
+                        // CRITICAL: Min SKD, Min SKB, and Cutoff only populated for P/L candidates
+                        if (totalLulusCount > 0) {
+                          if (hasPesertaList && passed.length > 0) {
+                            const validCuts = passed.map((p: any) => Number(p.nilaiAkhir) || 0).filter((v: number) => v > 0);
+                            if (validCuts.length > 0) {
+                              cut = Math.min(...validCuts).toFixed(3);
+                            }
+
+                            const validSkdPassed = passed.filter((p: any) => (Number(p.totalSkd) || 0) > 0);
+                            if (validSkdPassed.length > 0) {
+                              minSkdPeserta = validSkdPassed.reduce((min: any, p: any) => (Number(p.totalSkd || 0) < Number(min.totalSkd || 0) ? p : min), validSkdPassed[0]);
+                            }
+
+                            const validSkbScores = passed.map((p: any) => Number(p.skb) || 0).filter((s: number) => s > 0);
+                            if (validSkbScores.length > 0) {
+                              const minSkbNum = Math.min(...validSkbScores);
+                              minSkbVal = minSkbNum % 1 === 0 ? minSkbNum.toString() : minSkbNum.toFixed(2);
+                            }
+                          } else if (!hasPesertaList) {
+                            if (analytics?.cutoffNilaiAkhir != null && Number.isFinite(Number(analytics.cutoffNilaiAkhir)) && Number(analytics.cutoffNilaiAkhir) > 0) {
+                              cut = Number(analytics.cutoffNilaiAkhir).toFixed(3);
+                            }
+                            if (analytics?.minSkd != null && Number.isFinite(Number(analytics.minSkd)) && Number(analytics.minSkd) > 0) {
+                              fallbackMinSkdVal = Number(analytics.minSkd);
+                            }
+                            if (analytics?.minSkb != null && Number.isFinite(Number(analytics.minSkb)) && Number(analytics.minSkb) > 0) {
+                              const minSkbNum = Number(analytics.minSkb);
+                              minSkbVal = minSkbNum % 1 === 0 ? minSkbNum.toString() : minSkbNum.toFixed(2);
+                            }
+                          }
                         }
 
                         let skdBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
@@ -1588,19 +1620,6 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
                           if (activeMinSkd > 440) skdBadgeStyle = 'bg-rose-500/10 text-rose-300 border-rose-500/20';
                           else if (activeMinSkd >= 400) skdBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
                           else skdBadgeStyle = 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
-                        }
-
-                        let minSkbVal = '-';
-                        if (passed.length > 0) {
-                          const minSkbNum = Math.min(...passed.map((p: any) => Number(p.skb) || 0));
-                          if (minSkbNum > 0) {
-                            minSkbVal = minSkbNum % 1 === 0 ? minSkbNum.toString() : minSkbNum.toFixed(2);
-                          }
-                        } else if (analytics?.minSkb != null && Number.isFinite(Number(analytics.minSkb))) {
-                          const minSkbNum = Number(analytics.minSkb);
-                          if (minSkbNum > 0) {
-                            minSkbVal = minSkbNum % 1 === 0 ? minSkbNum.toString() : minSkbNum.toFixed(2);
-                          }
                         }
 
                         let skbBadgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
