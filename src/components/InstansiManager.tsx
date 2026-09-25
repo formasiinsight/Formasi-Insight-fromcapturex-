@@ -1139,7 +1139,7 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
                   <span className="text-slate-400 block text-[11px]">Project ID:</span>
-                  <span className="font-mono text-white text-xs">hkmtzbidbfbkykppfpvp</span>
+                  <span className="font-mono text-white text-xs">tecsyuwdfmfidkxctvny</span>
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
                   <span className="text-slate-400 block text-[11px]">Status Integrasi:</span>

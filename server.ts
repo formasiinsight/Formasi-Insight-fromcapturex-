@@ -16,8 +16,8 @@ import { classifyInstansi, extractInstansiHeaderFromRawText } from './src/utils/
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Supabase Configuration
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://hkmtzbidbfbkykppfpvp.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrbXR6YmlkYmZia3lrcHBmcHZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwNjU0NjksImV4cCI6MjEwMjY0MTQ2OX0.3UNqTucuqlK7OSqr0uSV8cC7XTFG3H5p3HY6wLdDT7U';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tecsyuwdfmfidkxctvny.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_DFuF0jkzJ_MPBCZMzvPfyw_dUjsGvyE';
 
 let supabaseClient: SupabaseClient | null = null;
 let isSupabaseConnected = false;
@@ -167,11 +167,8 @@ function simplifyParsedDataForDatabase(parsedData: any): any {
     totalPages: parsedData.meta?.totalPages || 1,
   };
 
-  // If the dataset has more than 150 formations (like Kemendikbud with 7,934 formations),
-  // truncate the embedded JSON array to the top 10 preview formations in the 'instansi' row.
-  // The full 7,934 formations are 100% saved in the relational 'formasi' table.
-  const isHugeDataset = rawFormasiList.length > 150;
-  const targetFormasiList = isHugeDataset ? rawFormasiList.slice(0, 10) : rawFormasiList;
+  // Keep full formations list with lightweight metadata (pesertaList is stripped to keep payload lean)
+  const targetFormasiList = rawFormasiList;
 
   const formasiList = targetFormasiList.map((f: any, idx: number) => {
     const fPesertaList = Array.isArray(f.pesertaList) ? f.pesertaList : [];
@@ -610,115 +607,71 @@ async function initCloudStorage() {
       }
     }
 
-    // 1. Try fetching from Supabase 'instansi' table with fast 2s timeout
+    // 1. Try fetching from Supabase 'instansi' table using chunked requests to prevent PostgreSQL statement timeouts
     try {
       const supabase = getSupabase();
-      const fetchPromise = supabase
+      const { data: pingData, error: pingErr } = await supabase
         .from('instansi')
-        .select('*')
-        .order('updated_at', { ascending: false });
+        .select('id')
+        .limit(1);
 
-      const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-        setTimeout(() => reject(new Error('Supabase query timeout')), 2000)
-      );
-
-      const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
-
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const sbList = data.map(dbRowToInstansi);
-        // Instantly populate in-memory cache so all endpoints can serve fresh data immediately
-        memoryInstansiCache = sbList.map(prepareForMemoryCache);
+      if (!pingErr && pingData) {
         isSupabaseConnected = true;
         supabaseErrorMessage = null;
-        lastCloudSyncTime = new Date().toISOString();
-        console.log(`[Supabase Cloud] Initialized ${memoryInstansiCache.length} records in memory cache.`);
 
-        // Hydrate full formations in background for any instansi with truncated or missing formasiList
-        for (let i = 0; i < sbList.length; i++) {
-          const inst = sbList[i];
-          const expCount = inst.totalFormasiDB || 0;
-          const curForms = inst.parsedData?.formasiList || [];
-          const curCount = curForms.length;
-          const isTruncated = expCount > 0 && curCount < expCount;
-          const hasMissingAnalytics = curForms.length > 0 && !curForms.some((f: any) => f.analytics && (f.analytics.minSkd != null || f.analytics.cutoffNilaiAkhir != null));
-          const needsHydration = expCount > 0 && (isTruncated || hasMissingAnalytics || curCount === 0);
-
-          if (needsHydration) {
-            try {
-              const allFormasiRows: any[] = [];
-              let fOffset = 0;
-              let hasMore = true;
-              while (hasMore) {
-                const { data: fChunk, error: fErr } = await supabase
-                  .from('formasi')
-                  .select('*')
-                  .eq('instansi_id', inst.id)
-                  .range(fOffset, fOffset + 999);
-
-                if (!fErr && Array.isArray(fChunk) && fChunk.length > 0) {
-                  allFormasiRows.push(...fChunk);
-                  if (fChunk.length < 1000) hasMore = false;
-                  else fOffset += 1000;
-                } else {
-                  hasMore = false;
-                }
-              }
-
-              if (allFormasiRows.length > 0) {
-                const hydratedBlocks = allFormasiRows.map((r, idx) => formasiDbRowToBlock(r, idx, inst.nama, inst.kode));
-                const totalPeserta = hydratedBlocks.reduce((sum, f) => sum + (f.pesertaCount || 0), 0);
-                sbList[i] = {
-                  ...inst,
-                  status: 'terdaftar',
-                  parsedData: {
-                    ...(inst.parsedData || {
-                      meta: {
-                        docTitle: `Hasil Integrasi SSCASN - ${inst.nama}`,
-                        tahun: inst.tahun || '2024',
-                        parsedAt: inst.updatedAt || new Date().toISOString(),
-                        sourceType: 'pdf',
-                        fileName: inst.pdfFileName,
-                        totalFormasiCount: hydratedBlocks.length,
-                        totalPesertaCount: totalPeserta,
-                      },
-                      formasiList: [],
-                      pesertaList: [],
-                      header: hydratedBlocks[0]?.header || {
-                        instansi: inst.nama,
-                        kodeInstansi: inst.kode,
-                        jabatanFormasi: '',
-                        lokasiFormasi: '',
-                        jenisFormasi: 'UMUM',
-                        pendidikan: '',
-                        jumlahKuota: 1,
-                      },
-                    }),
-                    formasiList: hydratedBlocks,
-                  },
-                };
-              }
-            } catch (hydErr) {
-              console.warn(`[Supabase Cloud] Error hydrating formations for ${inst.nama}:`, hydErr);
-            }
+        // Fetch in safe batches of 15 to stay well clear of PostgREST payload & statement limits
+        const CHUNK_SIZE = 15;
+        let allSbRows: any[] = [];
+        for (let offset = 0; offset < 200; offset += CHUNK_SIZE) {
+          const { data: chunk, error: chunkErr } = await supabase
+            .from('instansi')
+            .select('*')
+            .order('nama', { ascending: true })
+            .range(offset, offset + CHUNK_SIZE - 1);
+          if (chunkErr) {
+            console.warn(`[Supabase Cloud] Notice at batch offset ${offset}:`, chunkErr.message);
+            break;
           }
+          if (!chunk || chunk.length === 0) break;
+          allSbRows = allSbRows.concat(chunk);
+          if (chunk.length < CHUNK_SIZE) break;
         }
 
-        memoryInstansiCache = sbList.map(prepareForMemoryCache);
+        if (allSbRows.length > 0) {
+          const sbList = allSbRows.map(dbRowToInstansi);
+          // Safely merge with fileCache: if local fileCache has more formations for any instansi, preserve complete data
+          const mergedList = sbList.map((sbItem) => {
+            const localItem = fileCache.find((f) => f.id === sbItem.id);
+            const localFormasiCount = localItem?.parsedData?.formasiList?.length || 0;
+            const sbFormasiCount = sbItem?.parsedData?.formasiList?.length || 0;
+            if (localItem && localFormasiCount > sbFormasiCount) {
+              return {
+                ...sbItem,
+                parsedData: localItem.parsedData,
+                totalFormasiDB: Math.max(localFormasiCount, sbItem.totalFormasiDB || 0),
+              };
+            }
+            return sbItem;
+          });
 
-        isSupabaseConnected = true;
-        supabaseErrorMessage = null;
-        lastCloudSyncTime = new Date().toISOString();
-        console.log(`[Supabase Cloud] Loaded and synchronized ${memoryInstansiCache.length} records from Supabase.`);
+          // If fileCache has instansi not yet in Supabase, preserve them
+          for (const localItem of fileCache) {
+            if (!mergedList.some((i) => i.id === localItem.id)) {
+              mergedList.push(localItem);
+            }
+          }
 
-        // Mirror to local file backup safely
-        await safeWriteJsonFile(CLOUD_DB_FILE, memoryInstansiCache);
-        return;
-      } else if (!error && Array.isArray(data)) {
-        isSupabaseConnected = true;
-        supabaseErrorMessage = null;
-      } else if (error) {
-        console.warn(`[Supabase Cloud] Notice: ${error.message}. (Table might need to be created in Supabase SQL editor).`);
-        supabaseErrorMessage = error.message;
+          memoryInstansiCache = mergedList.map(prepareForMemoryCache);
+          isSupabaseConnected = true;
+          supabaseErrorMessage = null;
+          lastCloudSyncTime = new Date().toISOString();
+          console.log(`[Supabase Cloud] Loaded and synchronized ${memoryInstansiCache.length} records from Supabase.`);
+          await safeWriteJsonFile(CLOUD_DB_FILE, memoryInstansiCache);
+          return;
+        }
+      } else if (pingErr) {
+        console.warn(`[Supabase Cloud] Notice: ${pingErr.message}. (Table might need to be created in Supabase SQL editor).`);
+        supabaseErrorMessage = pingErr.message;
       }
     } catch (sbErr: any) {
       console.warn('[Supabase Cloud] Connection check error:', sbErr?.message || sbErr);
@@ -1413,7 +1366,7 @@ Tolong berikan analisis dan jawaban terbaik berdasarkan data formasi aktif di at
       cloudActive: true,
       provider: 'Supabase Cloud PostgreSQL',
       projectName: 'Formasi Insight',
-      projectId: 'hkmtzbidbfbkykppfpvp',
+      projectId: 'tecsyuwdfmfidkxctvny',
       supabaseConnected: supabasePingSuccess || isSupabaseConnected,
       supabaseErrorMessage,
       storageType: supabasePingSuccess ? 'Supabase Cloud PostgreSQL Database' : 'Server Persistent Backup Store',

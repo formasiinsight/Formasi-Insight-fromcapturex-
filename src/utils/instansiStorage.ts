@@ -366,22 +366,28 @@ export async function loadInstansiListAsync(forceRefresh = false): Promise<Insta
     // API not reachable (expected on static Vercel)
   }
 
-  // 2. Direct Supabase Query (Fallback for static Vercel environments with 2.5s strict timeout)
+  // 2. Direct Supabase Query (Fallback for static Vercel environments using chunking to avoid statement timeouts)
   try {
     const supabase = getSupabaseClient();
-    const queryPromise = supabase
-      .from('instansi')
-      .select('*')
-      .order('updated_at', { ascending: false });
+    const CHUNK_SIZE = 15;
+    let allSbRows: any[] = [];
+    for (let offset = 0; offset < 200; offset += CHUNK_SIZE) {
+      const { data: chunk, error: chunkErr } = await supabase
+        .from('instansi')
+        .select('*')
+        .order('nama', { ascending: true })
+        .range(offset, offset + CHUNK_SIZE - 1);
+      if (chunkErr) {
+        console.warn(`[Supabase Direct] Notice at batch offset ${offset}:`, chunkErr.message);
+        break;
+      }
+      if (!chunk || chunk.length === 0) break;
+      allSbRows = allSbRows.concat(chunk);
+      if (chunk.length < CHUNK_SIZE) break;
+    }
 
-    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-      setTimeout(() => reject(new Error('Supabase connection timeout')), 2500)
-    );
-
-    const { data: sbData, error: sbError } = (await Promise.race([queryPromise, timeoutPromise])) as any;
-
-    if (!sbError && Array.isArray(sbData) && sbData.length > 0) {
-      const instansiList = sbData.map(dbRowToInstansi);
+    if (allSbRows.length > 0) {
+      const instansiList = allSbRows.map(dbRowToInstansi);
       const normalized = deduplicateInstansiList(instansiList);
       runtimeCache = normalized;
       lastCloudSyncTimestamp = new Date().toISOString();
