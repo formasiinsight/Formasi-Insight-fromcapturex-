@@ -32,6 +32,7 @@ import { InstansiItem, InstansiKategori, SSCASNParsedResult } from '../types';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { getFormasiKuota } from '../utils/kuotaUtils';
 import { saveInstansiListAsync, loadInstansiListAsync, fetchFullInstansiDataAsync } from '../utils/instansiStorage';
+import { getInstansiProvinsi } from '../utils/instansiClassifier';
 
 export type InstansiSortField = 'NONE' | 'KODE' | 'NAMA' | 'KATEGORI' | 'FORMASI' | 'KUOTA' | 'PESERTA' | 'STATUS';
 export type SortDirection = 'asc' | 'desc';
@@ -61,6 +62,7 @@ export const InstansiManager: React.FC<InstansiManagerProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKategori, setSelectedKategori] = useState<InstansiKategori | 'ALL'>('ALL');
+  const [selectedProvinsi, setSelectedProvinsi] = useState<string>('ALL');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [sortField, setSortField] = useState<InstansiSortField>('NONE');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -299,6 +301,25 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
     }
   });
 
+  // List of unique provinces for Pemkab/Pemkot category with counts
+  const pemkabProvincesWithCount = useMemo(() => {
+    const countMap: Record<string, number> = {};
+    safeList.forEach((inst) => {
+      if (inst && inst.kategori === 'pemkab_pemkot') {
+        const prov = getInstansiProvinsi(inst) || 'Lainnya';
+        countMap[prov] = (countMap[prov] || 0) + 1;
+      }
+    });
+
+    return Object.entries(countMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [safeList]);
+
+  const totalPemkabCount = useMemo(() => {
+    return safeList.filter((inst) => inst?.kategori === 'pemkab_pemkot').length;
+  }, [safeList]);
+
   // Filtering logic
   const filteredList = safeList.filter((inst) => {
     if (!inst) return false;
@@ -311,6 +332,13 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
 
     if (selectedKategori !== 'ALL' && inst.kategori !== selectedKategori) {
       return false;
+    }
+
+    if (selectedKategori === 'pemkab_pemkot' && selectedProvinsi !== 'ALL') {
+      const prov = getInstansiProvinsi(inst) || '';
+      if (prov.toLowerCase() !== selectedProvinsi.toLowerCase()) {
+        return false;
+      }
     }
 
     return true;
@@ -663,7 +691,12 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
           ].map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setSelectedKategori(tab.key as any)}
+              onClick={() => {
+                setSelectedKategori(tab.key as any);
+                if (tab.key !== 'pemkab_pemkot') {
+                  setSelectedProvinsi('ALL');
+                }
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer transition-all ${
                 selectedKategori === tab.key
                   ? 'bg-indigo-600 text-white shadow-md'
@@ -674,6 +707,74 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
             </button>
           ))}
         </div>
+
+        {/* PROVINSI FILTER (Muncul saat chip Pemkab/Pemkot dipilih) */}
+        {selectedKategori === 'pemkab_pemkot' && (
+          <div className="pt-2.5 pb-1 border-t border-slate-800/60 flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center gap-1.5 text-xs text-amber-300 font-bold bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 rounded-xl shrink-0">
+              <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Filter Provinsi:</span>
+            </div>
+
+            {/* Quick province chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+              <button
+                type="button"
+                onClick={() => setSelectedProvinsi('ALL')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer transition-all ${
+                  selectedProvinsi === 'ALL'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-sm shadow-amber-500/20'
+                    : 'bg-slate-950/90 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                Semua Provinsi ({totalPemkabCount})
+              </button>
+
+              {pemkabProvincesWithCount.map(({ name, count }) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setSelectedProvinsi(name)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer transition-all ${
+                    selectedProvinsi === name
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow-sm shadow-amber-500/20'
+                      : 'bg-slate-950/90 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  {name} ({count})
+                </button>
+              ))}
+            </div>
+
+            {/* Dropdown Selector */}
+            <div className="relative ml-auto sm:ml-0">
+              <select
+                value={selectedProvinsi}
+                onChange={(e) => setSelectedProvinsi(e.target.value)}
+                className="bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-slate-200 text-xs font-medium rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner transition-colors"
+              >
+                <option value="ALL">-- Pilih Provinsi ({totalPemkabCount}) --</option>
+                {pemkabProvincesWithCount.map(({ name, count }) => (
+                  <option key={name} value={name} className="bg-slate-900 text-white">
+                    {name} ({count} Pemkab/Pemkot)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedProvinsi !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setSelectedProvinsi('ALL')}
+                className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg border border-amber-500/30 cursor-pointer transition-colors"
+                title="Reset filter provinsi"
+              >
+                <span>Reset: {selectedProvinsi}</span>
+                <span className="font-bold">✕</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 1 UNIFIED TABLE WITH KATALOG FORMASI TABLE STYLE */}
@@ -971,12 +1072,15 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
                       <td className="p-2.5">
                         <div className="space-y-1">
                           <div>{getKategoriBadge(inst.kategori)}</div>
-                          {inst.provinsi && (
-                            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium truncate">
-                              <MapPin className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span className="truncate">{inst.provinsi}</span>
-                            </div>
-                          )}
+                          {(() => {
+                            const provName = getInstansiProvinsi(inst);
+                            return provName ? (
+                              <div className="flex items-center gap-1 text-[10px] text-amber-300 font-medium truncate">
+                                <MapPin className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span className="truncate">{provName}</span>
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                       </td>
 

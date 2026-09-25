@@ -18,6 +18,7 @@ import {
 import { InstansiItem, SSCASNFormasiBlock } from '../types';
 import { getFormasiKuota as calculateKuota } from '../utils/kuotaUtils';
 import { matchPendidikanWithFilters } from '../utils/jenisFormasiUtils';
+import { getInstansiProvinsi } from '../utils/instansiClassifier';
 
 interface DashboardAnalyticsProps {
   instansi: InstansiItem | null;
@@ -129,6 +130,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
   // State for instansi search query and category filter
   const [instansiSearchQuery, setInstansiSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [selectedProvinsi, setSelectedProvinsi] = useState<string>('ALL');
 
   // State for sorting columns
   const [sortField, setSortField] = useState<'NONE' | 'FORMASI' | 'KUOTA'>('NONE');
@@ -348,14 +350,22 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
         if (selectedCategory === 'KEMENTERIAN') return kat.includes('kementerian');
         if (selectedCategory === 'LEMBAGA') return kat.includes('lembaga');
         if (selectedCategory === 'PEMPROV') return kat.includes('pemprov') || kat.includes('provinsi');
-        if (selectedCategory === 'PEMKAB')
-          return (
+        if (selectedCategory === 'PEMKAB') {
+          const isPemkab =
             kat.includes('pemkab') ||
             kat.includes('pemkot') ||
             kat.includes('kabupaten') ||
             kat.includes('kota') ||
-            kat.includes('daerah')
-          );
+            kat.includes('daerah');
+          if (!isPemkab) return false;
+          if (selectedProvinsi !== 'ALL') {
+            const prov = getInstansiProvinsi(item.instansi) || '';
+            if (prov.toLowerCase() !== selectedProvinsi.toLowerCase()) {
+              return false;
+            }
+          }
+          return true;
+        }
         return true;
       });
     }
@@ -373,7 +383,42 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
     }
 
     return list;
-  }, [aggregatedData.matchingInstansiList, instansiSearchQuery, selectedCategory, sortField, sortOrder]);
+  }, [aggregatedData.matchingInstansiList, instansiSearchQuery, selectedCategory, selectedProvinsi, sortField, sortOrder]);
+
+  // Unique provinces among Pemkab/Pemkot in matching instansi
+  const pemkabProvincesWithCount = useMemo(() => {
+    const countMap: Record<string, number> = {};
+    aggregatedData.matchingInstansiList.forEach((item) => {
+      const kat = (item.instansi.kategori || '').toLowerCase();
+      const isPemkab =
+        kat.includes('pemkab') ||
+        kat.includes('pemkot') ||
+        kat.includes('kabupaten') ||
+        kat.includes('kota') ||
+        kat.includes('daerah');
+      if (isPemkab) {
+        const prov = getInstansiProvinsi(item.instansi) || 'Lainnya';
+        countMap[prov] = (countMap[prov] || 0) + 1;
+      }
+    });
+
+    return Object.entries(countMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [aggregatedData.matchingInstansiList]);
+
+  const totalPemkabCount = useMemo(() => {
+    return aggregatedData.matchingInstansiList.filter((item) => {
+      const kat = (item.instansi.kategori || '').toLowerCase();
+      return (
+        kat.includes('pemkab') ||
+        kat.includes('pemkot') ||
+        kat.includes('kabupaten') ||
+        kat.includes('kota') ||
+        kat.includes('daerah')
+      );
+    }).length;
+  }, [aggregatedData.matchingInstansiList]);
 
   // Infinite Scroll State & Intersection Observer
   const [displayLimit, setDisplayLimit] = useState<number>(25);
@@ -382,7 +427,7 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
   // Reset display limit on filter/search change or sort change
   useEffect(() => {
     setDisplayLimit(25);
-  }, [instansiSearchQuery, selectedCategory, appliedJenjang, appliedJurusan, sortField, sortOrder]);
+  }, [instansiSearchQuery, selectedCategory, selectedProvinsi, appliedJenjang, appliedJurusan, sortField, sortOrder]);
 
   // Auto load more on scroll
   useEffect(() => {
@@ -649,7 +694,12 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setSelectedCategory(tab.id)}
+                  onClick={() => {
+                    setSelectedCategory(tab.id);
+                    if (tab.id !== 'PEMKAB') {
+                      setSelectedProvinsi('ALL');
+                    }
+                  }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
                     selectedCategory === tab.id
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
@@ -660,6 +710,74 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
                 </button>
               ))}
             </div>
+
+            {/* PROVINSI FILTER BAR (Muncul saat chip Pemkab/Pemkot dipilih) */}
+            {selectedCategory === 'PEMKAB' && (
+              <div className="pt-2 pb-1 border-t border-slate-800/60 flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex items-center gap-1.5 text-xs text-amber-300 font-bold bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 rounded-xl shrink-0">
+                  <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Filter Provinsi:</span>
+                </div>
+
+                {/* Quick province chips */}
+                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProvinsi('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer transition-all ${
+                      selectedProvinsi === 'ALL'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-sm shadow-amber-500/20'
+                        : 'bg-slate-950/90 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    Semua Provinsi ({totalPemkabCount})
+                  </button>
+
+                  {pemkabProvincesWithCount.map(({ name, count }) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => setSelectedProvinsi(name)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer transition-all ${
+                        selectedProvinsi === name
+                          ? 'bg-amber-500 text-slate-950 font-bold shadow-sm shadow-amber-500/20'
+                          : 'bg-slate-950/90 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {name} ({count})
+                    </button>
+                  ))}
+                </div>
+
+                {/* Dropdown Selector */}
+                <div className="relative ml-auto sm:ml-0">
+                  <select
+                    value={selectedProvinsi}
+                    onChange={(e) => setSelectedProvinsi(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-slate-200 text-xs font-medium rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner transition-colors"
+                  >
+                    <option value="ALL">-- Pilih Provinsi ({totalPemkabCount}) --</option>
+                    {pemkabProvincesWithCount.map(({ name, count }) => (
+                      <option key={name} value={name} className="bg-slate-900 text-white">
+                        {name} ({count} Pemkab/Pemkot)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedProvinsi !== 'ALL' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProvinsi('ALL')}
+                    className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg border border-amber-500/30 cursor-pointer transition-colors"
+                    title="Reset filter provinsi"
+                  >
+                    <span>Reset: {selectedProvinsi}</span>
+                    <span className="font-bold">✕</span>
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* INSTANSI COMPARISON CARDS & TABLE */}
             <div className="border border-slate-800 rounded-2xl bg-slate-950/40 overflow-hidden shadow-inner">
@@ -786,9 +904,10 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
                                       ? item.instansi.kategori.replace('_', ' ')
                                       : 'Instansi'}
                                   </span>
-                                  {item.instansi.provinsi && (
-                                    <span>&bull; {item.instansi.provinsi}</span>
-                                  )}
+                                  {(() => {
+                                    const prov = getInstansiProvinsi(item.instansi);
+                                    return prov ? <span>&bull; {prov}</span> : null;
+                                  })()}
                                 </div>
                               </div>
                             </td>

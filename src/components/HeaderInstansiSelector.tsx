@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, ChevronDown, Check, X, Building2, MapPin, Landmark, Building } from 'lucide-react';
 import { InstansiItem, InstansiKategori } from '../types';
+import { getInstansiProvinsi } from '../utils/instansiClassifier';
 
 interface HeaderInstansiSelectorProps {
   selectedInstansi: InstansiItem | null;
@@ -22,6 +23,7 @@ export const HeaderInstansiSelector: React.FC<HeaderInstansiSelectorProps> = ({
   onSelectInstansi,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedProvinsi, setSelectedProvinsi] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -34,6 +36,7 @@ export const HeaderInstansiSelector: React.FC<HeaderInstansiSelectorProps> = ({
       if (!matchInCurrentCategory) {
         // Automatically switch category to match selected instansi
         setSelectedCategory(selectedInstansi.kategori);
+        setSelectedProvinsi('all');
       }
     }
   }, [selectedInstansi?.id]);
@@ -68,22 +71,41 @@ export const HeaderInstansiSelector: React.FC<HeaderInstansiSelectorProps> = ({
     return instansiList.filter((i) => i.kategori === catId).length;
   };
 
-  // Filter instansi list based on Category and Search Query
+  // Available provinces for Pemkab/Pemkot category
+  const availableProvinces = useMemo(() => {
+    const provSet = new Set<string>();
+    instansiList.forEach((inst) => {
+      if (inst.kategori === 'pemkab_pemkot') {
+        const prov = getInstansiProvinsi(inst);
+        if (prov) provSet.add(prov);
+      }
+    });
+    return Array.from(provSet).sort((a, b) => a.localeCompare(b));
+  }, [instansiList]);
+
+  // Filter instansi list based on Category, Province, and Search Query
   const filteredInstansi = instansiList.filter((inst) => {
     const matchesCategory = selectedCategory === 'all' || inst.kategori === selectedCategory;
+    const instProv = getInstansiProvinsi(inst) || '';
+    const matchesProvinsi =
+      selectedCategory !== 'pemkab_pemkot' ||
+      selectedProvinsi === 'all' ||
+      instProv.toLowerCase() === selectedProvinsi.toLowerCase();
+
     const query = searchQuery.trim().toLowerCase();
     const matchesSearch =
       !query ||
       inst.nama.toLowerCase().includes(query) ||
       (inst.kode && inst.kode.toLowerCase().includes(query)) ||
-      (inst.provinsi && inst.provinsi.toLowerCase().includes(query));
+      instProv.toLowerCase().includes(query);
 
-    return matchesCategory && matchesSearch;
+    return matchesCategory && matchesProvinsi && matchesSearch;
   });
 
   // Handle category change in Step 1
   const handleCategoryChange = (catId: string) => {
     setSelectedCategory(catId);
+    setSelectedProvinsi('all');
     setSearchQuery(''); // Reset search query when category changes
 
     // Filter list by new category
@@ -127,6 +149,41 @@ export const HeaderInstansiSelector: React.FC<HeaderInstansiSelectorProps> = ({
           </option>
         </select>
       </div>
+
+      {/* FILTER PROVINSI KHUSUS PEMKAB/PEMKOT */}
+      {selectedCategory === 'pemkab_pemkot' && (
+        <div className="flex items-center gap-1 bg-slate-950/90 border border-amber-800/60 hover:border-amber-600 rounded-lg px-2 py-1 text-xs text-slate-300 shadow-inner transition-colors animate-in fade-in">
+          <span className="text-[9px] font-extrabold uppercase tracking-wider text-amber-400 bg-amber-950/80 border border-amber-800/60 px-1 py-0.2 rounded shrink-0">
+            Provinsi
+          </span>
+          <select
+            value={selectedProvinsi}
+            onChange={(e) => {
+              const newProv = e.target.value;
+              setSelectedProvinsi(newProv);
+              setSearchQuery('');
+              const matches = instansiList.filter(
+                (i) =>
+                  i.kategori === 'pemkab_pemkot' &&
+                  (newProv === 'all' || (getInstansiProvinsi(i) || '').toLowerCase() === newProv.toLowerCase())
+              );
+              if (matches.length > 0 && selectedInstansi && !matches.some((i) => i.id === selectedInstansi.id)) {
+                onSelectInstansi(matches[0]);
+              }
+            }}
+            className="bg-transparent text-amber-200 font-bold focus:outline-none cursor-pointer text-xs max-w-[130px] truncate"
+          >
+            <option value="all" className="bg-slate-900 text-slate-200">
+              🌐 Semua Prov ({availableProvinces.length})
+            </option>
+            {availableProvinces.map((prov) => (
+              <option key={prov} value={prov} className="bg-slate-900 text-slate-200">
+                📍 {prov}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* STEP 2 & 3: Select Instansi with Real-time Search Dropdown */}
       <div className="relative">
@@ -254,7 +311,10 @@ export const HeaderInstansiSelector: React.FC<HeaderInstansiSelectorProps> = ({
                               ? 'Kementerian'
                               : 'Lembaga'}
                           </span>
-                          {inst.provinsi && <span>&bull; {inst.provinsi}</span>}
+                          {(() => {
+                            const p = getInstansiProvinsi(inst);
+                            return p ? <span>&bull; {p}</span> : null;
+                          })()}
                         </div>
                       </div>
 

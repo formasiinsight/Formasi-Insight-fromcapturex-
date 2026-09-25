@@ -446,3 +446,17 @@ export function extractInstansiHeaderFromRawText(rawText: string): ExtractedInst
     tahun: rawTahun,
   };
 }
+
+/**
+ * Helper to resolve the authoritative province of an instansi.
+ * Falls back to classifier rule matching if the instansi item has an undefined/empty provinsi field.
+ */
+export function getInstansiProvinsi(inst?: { nama?: string; kode?: string; provinsi?: string } | null): string | undefined {
+  if (!inst) return undefined;
+  if (inst.provinsi && inst.provinsi.trim()) {
+    return inst.provinsi.trim();
+  }
+  if (!inst.nama) return undefined;
+  const classified = classifyInstansi(inst.nama, inst.kode);
+  return classified.provinsi;
+}
