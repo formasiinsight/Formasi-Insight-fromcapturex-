@@ -85,7 +85,11 @@ export const HeaderInstansiSelector: React.FC<HeaderInstansiSelectorProps> = ({
 
   // Filter instansi list based on Category, Province, and Search Query
   const filteredInstansi = instansiList.filter((inst) => {
-    const matchesCategory = selectedCategory === 'all' || inst.kategori === selectedCategory;
+    const matchesCategory =
+      selectedCategory === 'all' ||
+      (selectedCategory === 'pemkab_pemkot' && selectedProvinsi !== 'all'
+        ? inst.kategori === 'pemkab_pemkot' || inst.kategori === 'pemprov'
+        : inst.kategori === selectedCategory);
     const instProv = getInstansiProvinsi(inst) || '';
     const matchesProvinsi =
       selectedCategory !== 'pemkab_pemkot' ||
@@ -100,6 +104,12 @@ export const HeaderInstansiSelector: React.FC<HeaderInstansiSelectorProps> = ({
       instProv.toLowerCase().includes(query);
 
     return matchesCategory && matchesProvinsi && matchesSearch;
+  }).sort((a, b) => {
+    if (selectedCategory === 'pemkab_pemkot' && selectedProvinsi !== 'all') {
+      if (a.kategori === 'pemprov' && b.kategori !== 'pemprov') return -1;
+      if (b.kategori === 'pemprov' && a.kategori !== 'pemprov') return 1;
+    }
+    return (a.nama || '').localeCompare(b.nama || '');
   });
 
   // Handle category change in Step 1
@@ -306,7 +316,7 @@ export const HeaderInstansiSelector: React.FC<HeaderInstansiSelectorProps> = ({
                             {inst.kategori === 'pemkab_pemkot'
                               ? 'Pemkab / Pemkot'
                               : inst.kategori === 'pemprov'
-                              ? 'Pemprov'
+                              ? 'Pemprov (Provinsi Induk)'
                               : inst.kategori === 'kementerian'
                               ? 'Kementerian'
                               : 'Lembaga'}

@@ -31,7 +31,7 @@ import {
 import { InstansiItem, InstansiKategori, SSCASNParsedResult, SSCASNFormasiBlock } from '../types';
 import { calculateVerification, SAMPLE_SSCASN_DATA } from '../utils/sampleData';
 import { getFormasiKuota } from '../utils/kuotaUtils';
-import { classifyInstansi, DAFTAR_PROVINSI_INDONESIA } from '../utils/instansiClassifier';
+import { classifyInstansi, DAFTAR_PROVINSI_INDONESIA, getInstansiProvinsi } from '../utils/instansiClassifier';
 import { JurusanListDisplay } from './JurusanListDisplay';
 import { LokasiDisplay } from './LokasiDisplay';
 
@@ -117,7 +117,7 @@ export const FormasiWizardModal: React.FC<FormasiWizardModalProps> = ({
         setNama(initialItem.nama || '');
         setKode(initialItem.kode || '');
         setKategori(initialItem.kategori || 'kementerian');
-        setProvinsi(initialItem.provinsi || '');
+        setProvinsi(initialItem.provinsi || getInstansiProvinsi(initialItem) || '');
         setTahun(initialItem.tahun || '2024');
         setNotes(initialItem.notes || '');
 

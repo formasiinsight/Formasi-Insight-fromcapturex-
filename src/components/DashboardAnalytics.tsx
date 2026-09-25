@@ -357,14 +357,14 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
             kat.includes('kabupaten') ||
             kat.includes('kota') ||
             kat.includes('daerah');
-          if (!isPemkab) return false;
+          const isPemprov = kat.includes('pemprov') || kat.includes('provinsi');
+
           if (selectedProvinsi !== 'ALL') {
             const prov = getInstansiProvinsi(item.instansi) || '';
-            if (prov.toLowerCase() !== selectedProvinsi.toLowerCase()) {
-              return false;
-            }
+            const matchesProv = prov.toLowerCase() === selectedProvinsi.toLowerCase();
+            return (isPemkab || isPemprov) && matchesProv;
           }
-          return true;
+          return isPemkab;
         }
         return true;
       });
@@ -904,6 +904,11 @@ export const DashboardAnalytics: React.FC<DashboardAnalyticsProps> = ({
                                       ? item.instansi.kategori.replace('_', ' ')
                                       : 'Instansi'}
                                   </span>
+                                  {(item.instansi.kategori === 'pemprov' || (item.instansi.nama && /pemerintah provinsi/i.test(item.instansi.nama))) && (
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                      Provinsi Induk
+                                    </span>
+                                  )}
                                   {(() => {
                                     const prov = getInstansiProvinsi(item.instansi);
                                     return prov ? <span>&bull; {prov}</span> : null;

@@ -2,6 +2,7 @@ import { InstansiItem, SSCASNParsedResult, SSCASNFormasiBlock, SSCASNPeserta } f
 import { normalizeParsedDataHeaders } from './jenisFormasiUtils';
 import { getSupabaseClient, SUPABASE_PROJECT_CONFIG } from './supabaseClient';
 import { INITIAL_INSTANSI_LIST } from './instansiSeedData';
+import { getInstansiProvinsi } from './instansiClassifier';
 
 const STORAGE_KEY = 'cpns_instansi_cloud_cache_v2_6';
 const DB_NAME = 'SSCASN_Cloud_DB_v2_6';
@@ -59,13 +60,18 @@ function emitCloudSyncEvent(status: 'syncing' | 'synced' | 'offline' | 'error', 
 }
 
 function normalizeInstansiItem(item: InstansiItem): InstansiItem {
+  const prov = item.provinsi || getInstansiProvinsi(item);
   if (item.parsedData) {
     return {
       ...item,
+      provinsi: prov,
       parsedData: normalizeParsedDataHeaders(item.parsedData),
     };
   }
-  return item;
+  return {
+    ...item,
+    provinsi: prov,
+  };
 }
 
 export function deduplicateInstansiList(list: InstansiItem[]): InstansiItem[] {
@@ -205,12 +211,16 @@ function dbRowToInstansi(row: any): InstansiItem {
   const totalFormasi = Number(row.total_formasi) || (parsedData?.formasiList?.length ?? 0);
   const status = row.status || (totalFormasi > 0 || (parsedData?.formasiList?.length > 0) ? 'terdaftar' : 'perlu_upload');
 
+  const rawNama = row.nama || row.name || 'Instansi';
+  const rawKode = row.kode || row.code || '';
+  const fallbackProv = getInstansiProvinsi({ nama: rawNama, kode: rawKode });
+
   return {
     id: row.id,
-    nama: row.nama || row.name || 'Instansi',
-    kode: row.kode || row.code || '',
+    nama: rawNama,
+    kode: rawKode,
     kategori: row.kategori || 'kementerian',
-    provinsi: row.provinsi || row.province || undefined,
+    provinsi: row.provinsi || row.province || row.parsed_data?.provinsi || row.parsedData?.provinsi || fallbackProv || undefined,
     status,
     tahun: row.tahun || row.year || '2024',
     pdfFileName: row.pdf_file_name || row.pdfFileName || undefined,
@@ -453,12 +463,16 @@ export async function saveInstansiListAsync(list: InstansiItem[]): Promise<void>
         }
       }
 
+      const parsedWithProv = {
+        ...(item.parsedData || {}),
+        provinsi: item.provinsi || getInstansiProvinsi(item) || null,
+      };
+
       return {
         id: item.id,
         kode: item.kode || '',
         nama: item.nama,
         kategori: item.kategori || 'kementerian',
-        provinsi: item.provinsi || null,
         status: item.status || 'perlu_upload',
         tahun: item.tahun || '2024',
         pdf_file_name: item.pdfFileName || null,
@@ -466,7 +480,7 @@ export async function saveInstansiListAsync(list: InstansiItem[]): Promise<void>
         total_formasi: totalFormasi,
         total_kuota: totalKuota,
         total_peserta: totalPeserta,
-        parsed_data: item.parsedData || null,
+        parsed_data: parsedWithProv,
         updated_at: item.updatedAt || new Date().toISOString(),
       };
     });
@@ -542,7 +556,6 @@ export async function updateInstansiParsedDataAsync(
           kode: targetItem.kode || '',
           nama: targetItem.nama,
           kategori: targetItem.kategori || 'kementerian',
-          provinsi: targetItem.provinsi || null,
           status: 'terdaftar',
           tahun: targetItem.tahun || '2024',
           pdf_file_name: targetItem.pdfFileName || null,
@@ -550,7 +563,10 @@ export async function updateInstansiParsedDataAsync(
           total_formasi: totalFormasi,
           total_kuota: totalKuota,
           total_peserta: totalPeserta,
-          parsed_data: targetItem.parsedData || null,
+          parsed_data: {
+            ...(targetItem.parsedData || {}),
+            provinsi: targetItem.provinsi || getInstansiProvinsi(targetItem) || null,
+          },
           updated_at: targetItem.updatedAt || new Date().toISOString(),
         },
       ]);
@@ -604,7 +620,6 @@ export async function addInstansiManualAsync(
         kode: fullItem.kode || '',
         nama: fullItem.nama,
         kategori: fullItem.kategori || 'kementerian',
-        provinsi: fullItem.provinsi || null,
         status: fullItem.status || 'perlu_upload',
         tahun: fullItem.tahun || '2024',
         pdf_file_name: fullItem.pdfFileName || null,
@@ -612,7 +627,9 @@ export async function addInstansiManualAsync(
         total_formasi: 0,
         total_kuota: 0,
         total_peserta: 0,
-        parsed_data: null,
+        parsed_data: {
+          provinsi: fullItem.provinsi || getInstansiProvinsi(fullItem) || null,
+        },
         updated_at: fullItem.updatedAt,
       },
     ]);
@@ -670,9 +687,12 @@ export async function updateInstansiMetadataAsync(
       nama: targetItem.nama,
       kode: targetItem.kode || '',
       kategori: targetItem.kategori,
-      provinsi: targetItem.provinsi || null,
       tahun: targetItem.tahun,
       notes: targetItem.notes || null,
+      parsed_data: {
+        ...(targetItem.parsedData || {}),
+        provinsi: targetItem.provinsi || getInstansiProvinsi(targetItem) || null,
+      },
       updated_at: targetItem.updatedAt,
     }).eq('id', id);
   } catch (sbErr) {

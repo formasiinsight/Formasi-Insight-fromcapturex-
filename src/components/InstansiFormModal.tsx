@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Building2, Save } from 'lucide-react';
 import { InstansiItem, InstansiKategori } from '../types';
-import { DAFTAR_PROVINSI_INDONESIA } from '../utils/instansiClassifier';
+import { DAFTAR_PROVINSI_INDONESIA, getInstansiProvinsi } from '../utils/instansiClassifier';
 
 interface InstansiFormModalProps {
   isOpen: boolean;
@@ -39,7 +39,7 @@ export const InstansiFormModal: React.FC<InstansiFormModalProps> = ({
       setNama(initialItem.nama || '');
       setKode(initialItem.kode || '');
       setKategori(initialItem.kategori || 'kementerian');
-      setProvinsi(initialItem.provinsi || '');
+      setProvinsi(initialItem.provinsi || getInstansiProvinsi(initialItem) || '');
       setTahun(initialItem.tahun || '2024');
       setNotes(initialItem.notes || '');
     } else {

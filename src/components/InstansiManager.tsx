@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS instansi (
     kode TEXT,
     nama TEXT NOT NULL,
     kategori TEXT NOT NULL,
+    provinsi TEXT,
     tahun TEXT DEFAULT '2024',
     pdf_file_name TEXT,
     total_formasi INTEGER DEFAULT 0,
@@ -93,6 +94,9 @@ CREATE TABLE IF NOT EXISTS instansi (
     parsed_data JSONB,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
+
+-- Pastikan kolom provinsi tersedia jika tabel sudah pernah dibuat sebelumnya
+ALTER TABLE instansi ADD COLUMN IF NOT EXISTS provinsi TEXT;
 
 -- 2. TABEL RELASIONAL: Rincian Jabatan & Formasi
 CREATE TABLE IF NOT EXISTS formasi (
@@ -330,13 +334,22 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
       if (!matchName && !matchKode) return false;
     }
 
-    if (selectedKategori !== 'ALL' && inst.kategori !== selectedKategori) {
-      return false;
-    }
+    if (selectedKategori !== 'ALL') {
+      if (selectedKategori === 'pemkab_pemkot') {
+        const isPemkab = inst.kategori === 'pemkab_pemkot';
+        const isPemprov = inst.kategori === 'pemprov';
 
-    if (selectedKategori === 'pemkab_pemkot' && selectedProvinsi !== 'ALL') {
-      const prov = getInstansiProvinsi(inst) || '';
-      if (prov.toLowerCase() !== selectedProvinsi.toLowerCase()) {
+        if (selectedProvinsi !== 'ALL') {
+          // Ketika filter provinsi dipilih: munculkan seluruh Pemkab/Pemkot dan Provinsi Induk (Pemprov) di wilayah ini
+          const prov = getInstansiProvinsi(inst) || '';
+          const matchesProv = prov.toLowerCase() === selectedProvinsi.toLowerCase();
+          if (!(isPemkab || isPemprov) || !matchesProv) {
+            return false;
+          }
+        } else {
+          if (!isPemkab) return false;
+        }
+      } else if (inst.kategori !== selectedKategori) {
         return false;
       }
     }
@@ -417,6 +430,13 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
     });
 
     if (sortField === 'NONE') {
+      if (selectedKategori === 'pemkab_pemkot' && selectedProvinsi !== 'ALL') {
+        return [...listWithStats].sort((a, b) => {
+          if (a.kategori === 'pemprov' && b.kategori !== 'pemprov') return -1;
+          if (b.kategori === 'pemprov' && a.kategori !== 'pemprov') return 1;
+          return (a.nama || '').localeCompare(b.nama || '');
+        });
+      }
       return listWithStats;
     }
 
@@ -763,15 +783,20 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
             </div>
 
             {selectedProvinsi !== 'ALL' && (
-              <button
-                type="button"
-                onClick={() => setSelectedProvinsi('ALL')}
-                className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg border border-amber-500/30 cursor-pointer transition-colors"
-                title="Reset filter provinsi"
-              >
-                <span>Reset: {selectedProvinsi}</span>
-                <span className="font-bold">✕</span>
-              </button>
+              <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+                <span className="text-[11px] font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                  <span>🏛️ Termasuk Provinsi Induk</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProvinsi('ALL')}
+                  className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg border border-amber-500/30 cursor-pointer transition-colors"
+                  title="Reset filter provinsi"
+                >
+                  <span>Reset: {selectedProvinsi}</span>
+                  <span className="font-bold">✕</span>
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -1071,7 +1096,14 @@ CREATE POLICY "Allow public read-write for peserta" ON peserta FOR ALL TO public
                       {/* KATEGORI & WILAYAH */}
                       <td className="p-2.5">
                         <div className="space-y-1">
-                          <div>{getKategoriBadge(inst.kategori)}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {getKategoriBadge(inst.kategori)}
+                            {inst.kategori === 'pemprov' && (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">
+                                🏛️ Provinsi Induk
+                              </span>
+                            )}
+                          </div>
                           {(() => {
                             const provName = getInstansiProvinsi(inst);
                             return provName ? (

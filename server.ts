@@ -12,7 +12,7 @@ import { calculateVerification } from './src/utils/sampleData';
 import { normalizeJenisFormasiHeader } from './src/utils/jenisFormasiUtils';
 import { INITIAL_INSTANSI_LIST } from './src/utils/instansiSeedData';
 import { SSCASNParsedResult, SSCASNPeserta, SSCASNFormasiBlock, InstansiItem } from './src/types';
-import { classifyInstansi, extractInstansiHeaderFromRawText } from './src/utils/instansiClassifier';
+import { classifyInstansi, extractInstansiHeaderFromRawText, getInstansiProvinsi } from './src/utils/instansiClassifier';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Supabase Configuration
@@ -271,6 +271,13 @@ function instansiToDbRow(item: InstansiItem) {
     }
   }
 
+  const safeProvinsi = item.provinsi || getInstansiProvinsi(item) || null;
+  const baseParsed = item.parsedData ? simplifyParsedDataForDatabase(item.parsedData) : {};
+  const parsedDataWithProv = {
+    ...baseParsed,
+    provinsi: safeProvinsi,
+  };
+
   return {
     id: safeId,
     kode: item.kode || '',
@@ -282,7 +289,7 @@ function instansiToDbRow(item: InstansiItem) {
     total_kuota: totalKuota,
     total_peserta: totalPeserta,
     notes: item.notes || null,
-    parsed_data: item.parsedData ? simplifyParsedDataForDatabase(item.parsedData) : null,
+    parsed_data: parsedDataWithProv,
     updated_at: item.updatedAt || new Date().toISOString(),
   };
 }
@@ -455,12 +462,16 @@ function dbRowToInstansi(row: any): InstansiItem {
   const totalFormasi = Number(row.total_formasi) || (parsedData?.formasiList?.length ?? 0);
   const status = row.status || (totalFormasi > 0 || (parsedData?.formasiList?.length > 0) ? 'terdaftar' : 'perlu_upload');
 
+  const rawNama = row.nama || row.name || 'Instansi';
+  const rawKode = row.kode || row.code || '';
+  const fallbackProv = getInstansiProvinsi({ nama: rawNama, kode: rawKode });
+
   return {
     id: row.id,
-    nama: row.nama || row.name || 'Instansi',
-    kode: row.kode || row.code || '',
+    nama: rawNama,
+    kode: rawKode,
     kategori: row.kategori || 'kementerian',
-    provinsi: row.provinsi || row.province || undefined,
+    provinsi: row.provinsi || row.province || row.parsed_data?.provinsi || row.parsedData?.provinsi || fallbackProv || undefined,
     status,
     tahun: row.tahun || row.year || '2024',
     pdfFileName: row.pdf_file_name || row.pdfFileName || undefined,
